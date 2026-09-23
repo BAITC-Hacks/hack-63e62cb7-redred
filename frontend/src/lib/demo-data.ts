@@ -1,5 +1,7 @@
 import type { Cart, CartProposal, ChatResponse, Product } from "@/lib/chat-api"
 
+export const demoEnabled = import.meta.env.VITE_DEMO_MODE === "true"
+
 export type DemoProduct = Product & {
   series: string
   current: number

@@ -49,6 +49,7 @@ import {
 } from "@/lib/chat-api"
 import {
   demoCatalog,
+  demoEnabled,
   prepareDemoProposal,
   readDemoCart,
   resolveDemoProposal,
@@ -436,6 +437,7 @@ function CatalogPage({
   const [category, setCategory] = useState("breakers")
   const [loading, setLoading] = useState(true)
   const [demoMode, setDemoMode] = useState(false)
+  const [catalogError, setCatalogError] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -443,12 +445,14 @@ function CatalogPage({
       .then((response) => {
         if (!active) return
         setDemoMode(response.catalog_scope === "demo_subset")
+        setCatalogError(false)
         setProducts(response.items)
       })
       .catch(() => {
         if (!active) return
-        setDemoMode(true)
-        setProducts(demoCatalog)
+        setDemoMode(demoEnabled)
+        setCatalogError(!demoEnabled)
+        setProducts(demoEnabled ? demoCatalog : [])
       })
       .finally(() => active && setLoading(false))
     return () => {
@@ -507,6 +511,7 @@ function CatalogPage({
           {productCount(visible.length)}
         </span>
         {demoMode ? <Badge variant="secondary">Демо</Badge> : null}
+        {catalogError ? <p role="alert">Каталог временно недоступен. Повторите поиск позже.</p> : null}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-3">
         <div aria-label="Категория" className="flex items-center gap-1.5" role="group">
@@ -794,11 +799,15 @@ function ProductPage({
 
 function CartPage({ onBack }: { onBack: () => void }) {
   const [cart, setCart] = useState<Cart | null>(null)
+  const [loadError, setLoadError] = useState(false)
   const load = useCallback(
     () =>
       getCart()
-        .then(setCart)
-        .catch(() => setCart(readDemoCart())),
+        .then((value) => { setCart(value); setLoadError(false) })
+        .catch(() => {
+          if (demoEnabled) setCart(readDemoCart())
+          else setLoadError(true)
+        }),
     []
   )
   useEffect(() => {
@@ -816,7 +825,12 @@ function CartPage({ onBack }: { onBack: () => void }) {
   return (
     <div className="px-4 py-6 md:px-10">
       <h1 className="text-[26px] font-bold">Корзина</h1>
-      {!cart ? (
+      {loadError ? (
+        <div role="alert" className="mt-5">
+          <p>Не удалось загрузить корзину. Проверьте соединение и повторите попытку.</p>
+          <Button className="mt-3" onClick={load}>Повторить</Button>
+        </div>
+      ) : !cart ? (
         <Skeleton className="mt-5 h-40" />
       ) : !cart.items.length ? (
         <div className="mt-5 grid min-h-[180px] place-items-center rounded-xl border border-dashed text-center">
@@ -918,7 +932,7 @@ export function Storefront() {
     () =>
       getCart()
         .then((cart) => setCartCount(cart.line_count))
-        .catch(() => setCartCount(readDemoCart().line_count)),
+        .catch(() => { if (demoEnabled) setCartCount(readDemoCart().line_count) }),
     []
   )
   useEffect(() => {
@@ -973,7 +987,7 @@ export function Storefront() {
       if (request !== cartActionRequest.current) return
       const apiError = error as ChatApiError
       let displayError: unknown = error
-      if (!apiError.code && demoCatalog.some((item) => item.id === product.id)) {
+      if (demoEnabled && !apiError.code && demoCatalog.some((item) => item.id === product.id)) {
         try {
           const proposal = prepareDemoProposal(product.id, quantity)
           setCartAction((current) =>

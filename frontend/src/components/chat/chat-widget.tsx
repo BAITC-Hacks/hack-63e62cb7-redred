@@ -42,7 +42,7 @@ import {
   resolveProposal,
   sendChatMessage,
 } from "@/lib/chat-api"
-import { createDemoResponse, resolveDemoProposal } from "@/lib/demo-data"
+import { createDemoResponse, resolveDemoProposal, demoEnabled } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
 
 type Message = {
@@ -375,6 +375,7 @@ function MessageView({
 }
 
 function canUseDemoFallback(error: unknown) {
+  if (!demoEnabled) return false
   if (!(error instanceof ChatApiError)) return true
   return (
     !error.code ||
