@@ -364,7 +364,7 @@ function MessageView({
       ) : null}
       {message.response?.cart_url ? (
         <Button asChild className="w-full">
-          <a href={message.response.cart_url}>
+          <a href={`${import.meta.env.BASE_URL}cart`}>
             Перейти в корзину
             <ShoppingCart data-icon="inline-end" />
           </a>

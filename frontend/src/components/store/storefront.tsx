@@ -917,9 +917,11 @@ function CartPage({ onBack }: { onBack: () => void }) {
   )
 }
 
+const basePath = import.meta.env.BASE_URL
+
 export function Storefront() {
   const [page, setPage] = useState<Page>(
-    window.location.pathname.startsWith("/cart")
+    window.location.pathname.startsWith(`${basePath}cart`)
       ? { name: "cart" }
       : { name: "catalog" }
   )
@@ -948,7 +950,7 @@ export function Storefront() {
     const handleSearch = (event: Event) => {
       setCatalogQuery((event as CustomEvent<string>).detail.trim())
       setPage({ name: "catalog" })
-      window.history.replaceState({}, "", "/")
+      window.history.replaceState({}, "", basePath)
       window.scrollTo({ top: 0, behavior: "smooth" })
     }
     window.addEventListener("catalog-search", handleSearch)
@@ -956,7 +958,7 @@ export function Storefront() {
   }, [])
   const go = (next: Page) => {
     setPage(next)
-    window.history.replaceState({}, "", next.name === "cart" ? "/cart" : "/")
+    window.history.replaceState({}, "", next.name === "cart" ? `${basePath}cart` : basePath)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 

@@ -179,6 +179,8 @@ export class ChatApiError extends Error {
 
 let sessionRequest: Promise<SessionResponse> | null = null
 
+const apiUrl = (path: string) => `${import.meta.env.BASE_URL}api${path}`
+
 async function readError(response: Response) {
   let body: ApiErrorBody | null = null
   try {
@@ -194,7 +196,7 @@ async function readError(response: Response) {
 }
 
 async function createSession() {
-  const response = await fetch("/api/session", {
+  const response = await fetch(apiUrl("/session"), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -214,7 +216,7 @@ async function getSession() {
 }
 
 export async function getAuthState() {
-  const response = await fetch("/api/auth/me", { credentials: "include" })
+  const response = await fetch(apiUrl("/auth/me"), { credentials: "include" })
   if (!response.ok) await readError(response)
   return (await response.json()) as AuthState
 }
@@ -224,7 +226,7 @@ async function authMutation(
   payload: { email: string; password: string; name?: string }
 ) {
   const session = await getSession()
-  const response = await fetch(`/api/auth/${action}`, {
+  const response = await fetch(apiUrl(`/auth/${action}`), {
     method: "POST",
     credentials: "include",
     headers: {
@@ -254,7 +256,7 @@ export function registerClient(name: string, email: string, password: string) {
 
 export async function logoutClient() {
   const session = await getSession()
-  const response = await fetch("/api/auth/logout", {
+  const response = await fetch(apiUrl("/auth/logout"), {
     method: "POST",
     credentials: "include",
     headers: { "X-CSRF-Token": session.csrf_token },
@@ -267,7 +269,7 @@ export async function logoutClient() {
 
 export async function getChatHistory() {
   await getSession()
-  const response = await fetch("/api/chat/messages?limit=50", {
+  const response = await fetch(apiUrl("/chat/messages?limit=50"), {
     credentials: "include",
   })
   if (!response.ok) await readError(response)
@@ -278,7 +280,7 @@ async function uploadAttachment(file: File, csrfToken: string) {
   const formData = new FormData()
   formData.append("file", file)
 
-  const response = await fetch("/api/attachments", {
+  const response = await fetch(apiUrl("/attachments"), {
     method: "POST",
     credentials: "include",
     headers: { "X-CSRF-Token": csrfToken },
@@ -298,7 +300,7 @@ export async function sendChatMessage(text: string, attachment?: File | null) {
     attachmentIds.push(uploaded.attachment_id)
   }
 
-  const response = await fetch("/api/chat/messages", {
+  const response = await fetch(apiUrl("/chat/messages"), {
     method: "POST",
     credentials: "include",
     headers: {
@@ -322,7 +324,7 @@ export async function resolveProposal(
   action: "confirm" | "cancel"
 ) {
   const session = await getSession()
-  const response = await fetch(`/api/cart/proposals/${proposalId}/${action}`, {
+  const response = await fetch(apiUrl(`/cart/proposals/${proposalId}/${action}`), {
     method: "POST",
     credentials: "include",
     headers: {
@@ -338,7 +340,7 @@ export async function resolveProposal(
 
 export async function prepareCartProposal(productId: number, quantity: number) {
   const session = await getSession()
-  const response = await fetch("/api/cart/proposals", {
+  const response = await fetch(apiUrl("/cart/proposals"), {
     method: "POST",
     credentials: "include",
     headers: {
@@ -356,7 +358,7 @@ export async function prepareCartProposal(productId: number, quantity: number) {
 
 export async function getCart() {
   await getSession()
-  const response = await fetch("/api/cart", {
+  const response = await fetch(apiUrl("/cart"), {
     credentials: "include",
   })
 
@@ -366,19 +368,19 @@ export async function getCart() {
 
 export async function searchProducts(query = "") {
   const params = new URLSearchParams({ q: query, limit: "20", offset: "0" })
-  const response = await fetch(`/api/products?${params}`)
+  const response = await fetch(apiUrl(`/products?${params}`))
   if (!response.ok) await readError(response)
   return (await response.json()) as CatalogResponse
 }
 
 export async function getProduct(productId: number) {
-  const response = await fetch(`/api/products/${productId}`)
+  const response = await fetch(apiUrl(`/products/${productId}`))
   if (!response.ok) await readError(response)
   return (await response.json()) as Product
 }
 
 export async function getPurchaseConditions() {
-  const response = await fetch("/api/purchase-conditions")
+  const response = await fetch(apiUrl("/purchase-conditions"))
   if (!response.ok) await readError(response)
   return (await response.json()) as Record<string, unknown>
 }
