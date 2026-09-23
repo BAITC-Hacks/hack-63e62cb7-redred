@@ -5,6 +5,15 @@ from backend.assistant_contract import AssistantContext
 from tests.test_assistant_service import PRODUCT, final, streamed_result
 
 class FastArticleTest(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_product_is_not_reported_as_zero_stock(self):
+        tools = AsyncMock()
+        tools.search_catalog.return_value = {"items": [], "total": 0, "catalog_scope": "demo_subset"}
+        result = await service.Evidence(tools).execute("search_catalog", '{"query":"свечи зажигания","article":null}')
+        self.assertEqual(result["match_status"], "not_found")
+        self.assertEqual(result["items"], [])
+        self.assertIn("not zero stock", result["guidance"])
+        tools.find_analogs.assert_not_awaited()
+
     async def test_verified_article_needs_only_one_streamed_call(self):
         tools = AsyncMock()
         tools.search_catalog.return_value = {"items": [{"id": 21449}], "total": 1}

@@ -54,6 +54,21 @@ Use conversation_state.last_product_ids to resolve 'that one' only if unambiguou
 For older discussion use search_history with a short distinctive keyword; it also
 refreshes associated product cards. History and state never authorize a purchase.
 If several products are possible, ask which one. If unresolved, ask a clarification.
+Stay within the verified electrical-products catalog of ekt.kz. Empty search results
+mean NOT FOUND in the searched dataset, never zero stock and never proof that the
+whole store does not sell the item. For an ambiguous word, clarify its meaning
+without advertising unverified categories (e.g. ask what 'свечи' means, not whether
+the customer wants automotive or decorative candles). If the customer clarifies
+'зажигания' and no catalog match exists, explain the limited search, ask for an
+article or photo, and offer a manager check. Do not ask for vehicle make, model,
+year or engine or imply you can fit automotive parts without verified catalog
+evidence supporting that service. Apply the same rule in ru, kk and en.
+Distinguish NOT FOUND from FOUND WITH ZERO STOCK. For the latter, use the returned
+verified analogs and explain their matching characteristics. For NOT FOUND, say
+that no suitable alternative can yet be confirmed: an article/photo/specification
+is needed to identify a reference product. Never replace ignition plugs with
+unrelated electrical items merely to offer an alternative. A manager check is
+only a suggested next step; never claim that a request has been sent.
 Report data_warnings, conflicting specifications and absent certificates honestly.
 For analogs explain matching characteristics and differences; do not guarantee
 electrical suitability. Availability is total across warehouses, not local stock.
@@ -201,7 +216,10 @@ class Evidence:
                     if len(self.tasks) >= 3 and item["id"] not in self.tasks:
                         break
                     cards.append(await self.details(item["id"], args.required_quantity))
-                return {"items": cards, "total": result.get("total"), "catalog_scope": result.get("catalog_scope")}
+                return {"items": cards, "total": result.get("total"), "catalog_scope": result.get("catalog_scope"),
+                        "match_status": "found" if cards else "not_found",
+                        "guidance": (None if cards else
+                            "No reference product identified. This is not zero stock. Do not invent an alternative or offer unsupported specialist fitting. Ask for article/photo/specification and offer a manager check; do not claim it was sent.")}
             if name == "get_product":
                 return await self.details(args.product_id, args.required_quantity)
             if name == "find_analogs":
