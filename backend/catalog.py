@@ -143,10 +143,22 @@ def normalize_product(raw: dict[str, Any], checked_at: str | None = None) -> dic
         warnings.append("В названии указан ток 160 А, в свойстве NOMINALNYY_TOK — 250 А; требуется уточнение")
     if product_id == 515279:
         warnings.append("В названии указан ток 40 А, в свойстве NOMINALNYY_TOK — 125 А; требуется уточнение")
-    unit, step = ("piece", "1") if product_id in DEMO_IDS else (None, None)
+    product_url = _source_url(raw.get("url"))
+    # EKT exposes minimum sale multiplicity in properties, not a top-level unit.
+    # Apply it to known piece-based categories; never guess units for cables etc.
+    multiplicity = _decimal(props.get("KRATNOST_MIN"))
+    piece_category = _category(product_url) in {
+        "Модульные автоматические выключатели", "Силовые автоматические выключатели", "Коробки",
+    }
+    if (piece_category and multiplicity is not None and multiplicity > 0
+            and multiplicity == multiplicity.to_integral_value()):
+        unit, step = "piece", str(int(multiplicity))
+    elif product_id in DEMO_IDS and props.get("KRATNOST_MIN") in (None, ""):
+        unit, step = "piece", "1"
+    else:
+        unit, step = None, None
     if unit is None:
         warnings.append("Единица и шаг продажи не проверены; покупка недоступна")
-    product_url = _source_url(raw.get("url"))
     brand = str(props.get("TORGOVAYA_MARKA") or "").strip() or None
     return {
         "id": product_id,
