@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 /README.md
+/ekt Чат-виджет.html
 
 # Editor directories and files
 .vscode/*

@@ -8,7 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider>
+    <ThemeProvider defaultTheme="light" storageKey="ekt-ui-theme">
       <TooltipProvider>
         <App />
       </TooltipProvider>
