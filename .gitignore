@@ -1,0 +1,34 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local Markdown and AI agent instructions
+*.md
+Agents.txt
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# Common dependency and build output
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
