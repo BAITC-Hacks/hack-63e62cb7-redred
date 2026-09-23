@@ -29,7 +29,7 @@ router = APIRouter(tags=["admin"])
 ADMIN_COOKIE = "hackalem_admin"
 ADMIN_TTL = timedelta(hours=8)
 _attempts: dict[str, deque[float]] = defaultdict(deque)
-_PAGE = Path(__file__).parent / "static" / "admin.html"
+_FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
 class LoginIn(BaseModel):
@@ -96,9 +96,16 @@ def _service(request: Request):
 
 
 @router.get("/admin", include_in_schema=False)
+@router.get("/admin/", include_in_schema=False)
 @router.get("/admin/catalog", include_in_schema=False)
+@router.get("/admin/chats", include_in_schema=False)
+@router.get("/admin/settings", include_in_schema=False)
+@router.get("/admin/ai", include_in_schema=False)
 async def catalog_admin_page() -> FileResponse:
-    return FileResponse(_PAGE, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
+    page = _FRONTEND / "index.html"
+    if not page.is_file():
+        raise APIError(503, "FRONTEND_NOT_BUILT", "Сначала выполните сборку React-фронтенда: npm --prefix frontend run build")
+    return FileResponse(page, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
 
 
 @router.post("/api/admin/session")

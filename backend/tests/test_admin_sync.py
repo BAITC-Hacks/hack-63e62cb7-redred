@@ -61,7 +61,7 @@ class AdminSyncTest(unittest.IsolatedAsyncioTestCase):
     async def test_login_access_csrf_trigger_cancel_logout(self):
         page = await self.client.get("/admin/catalog")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Полный обход каталога", page.text)
+        self.assertIn('id="root"', page.text)
         self.assertNotIn("test-secret-for-admin", page.text)
         self.assertEqual((await self.client.get("/api/admin/catalog/sync")).status_code, 401)
 

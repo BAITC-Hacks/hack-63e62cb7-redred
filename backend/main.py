@@ -9,6 +9,7 @@ import httpx
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from . import admin, admin_ai, attachments, auth, cart, chat, favorites, sessions
@@ -62,6 +63,7 @@ app.include_router(attachments.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
 app.include_router(admin_ai.router)
+app.mount("/assets", StaticFiles(directory=admin._FRONTEND / "assets", check_dir=False), name="frontend-assets")
 
 
 @app.exception_handler(CatalogNotFound)
