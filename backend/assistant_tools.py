@@ -12,6 +12,7 @@ class AssistantTools:
         self._catalog = catalog
         self._cart = cart
         self._history_search = history_search
+        self.model_control = getattr(catalog, "ai_model_control", None)
         self._product_tasks: dict[tuple[int, bool], asyncio.Task] = {}
         self._lookups = 0
 

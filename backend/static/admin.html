@@ -82,7 +82,7 @@
   </style>
 </head>
 <body>
-  <header><div class="bar"><div class="brand">HackAlem <small>Панель администратора</small></div><nav id="navigation" aria-label="Разделы" hidden><button type="button" data-tab="overview" class="active">Обзор</button><button type="button" data-tab="catalog">Каталог</button><button type="button" data-tab="chats">Чаты</button><button type="button" data-tab="settings">Настройки</button></nav><button id="logout" type="button" hidden>Выйти</button></div></header>
+  <header><div class="bar"><div class="brand">HackAlem <small>Панель администратора</small></div><nav id="navigation" aria-label="Разделы" hidden><button type="button" data-tab="overview" class="active">Обзор</button><button type="button" data-tab="catalog">Каталог</button><button type="button" data-tab="chats">Чаты</button><button type="button" data-tab="settings">Настройки</button><button type="button" data-tab="ai">AI-модель</button></nav><button id="logout" type="button" hidden>Выйти</button></div></header>
   <main>
     <section id="login-view" class="card login" hidden>
       <h1>Вход администратора</h1>
@@ -187,6 +187,37 @@
           </form>
         </div>
       </section>
+      <section id="ai-tab" class="tab-pane" hidden>
+        <h1>AI-модель</h1>
+        <p class="lead muted">Список моделей запрашивается сервером у OpenAI. Выбор вступает в силу только после успешной проверки и явного применения.</p>
+        <div class="grid">
+          <div class="card metric"><span>Активная модель</span><b id="ai-active">—</b></div>
+          <div class="card metric"><span>По умолчанию</span><b id="ai-default">—</b></div>
+          <div class="card metric"><span>Выбор администратора</span><b id="ai-override">—</b></div>
+          <div class="card metric"><span>Состояние</span><b id="ai-health">—</b></div>
+        </div>
+        <div class="two">
+          <section class="card">
+            <h2>Смена модели</h2>
+            <label for="ai-model" class="muted">Доступные модели</label>
+            <select id="ai-model" style="display:block;width:100%;margin-top:.5rem;border:1px solid #b7c5be;border-radius:9px;padding:.75rem;background:white;color:#172a25" disabled><option value="">Загрузите список моделей</option></select>
+            <p class="muted">Проверка отправит короткий запрос в OpenAI.</p>
+            <div class="actions">
+              <button id="ai-refresh" class="secondary" type="button">Обновить список</button>
+              <button id="ai-check" type="button" disabled>Проверить</button>
+              <button id="ai-apply" type="button" disabled>Применить</button>
+            </div>
+            <p id="ai-check-state" class="muted" role="status" aria-live="polite">Модель не проверена.</p>
+            <p id="ai-list-time" class="muted"></p>
+          </section>
+          <section class="card">
+            <h2>Последняя проверка</h2>
+            <p><strong>Время:</strong> <span id="ai-last-checked">—</span></p>
+            <p><strong>Последний сбой:</strong> <span id="ai-last-incident">Нет</span></p>
+            <p class="muted">Если выбранная модель недоступна, сервер может использовать модель по умолчанию. Состояние показывает только сохранённые данные и не выполняет пробный запрос.</p>
+          </section>
+        </div>
+      </section>
     </section>
   </main>
   <script>
@@ -202,6 +233,11 @@
       let selectedChat = null;
       let messageOffset = 0;
       let messageTotal = 0;
+      let aiTimer = null;
+      let aiStatus = null;
+      let aiCheck = null;
+      let aiBusy = false;
+      let aiListLoaded = false;
       const chatLimit = 20;
       const messageLimit = 30;
 
@@ -220,6 +256,8 @@
       function showLogin(message = '') {
         csrf = null; activeRun = null;
         clearTimeout(timer);
+        clearTimeout(aiTimer);
+        aiCheck = null;
         $('dashboard').hidden = true;
         $('navigation').hidden = true;
         $('logout').hidden = true;
@@ -250,8 +288,9 @@
         return data;
       }
       function setTab(name) {
+        clearTimeout(aiTimer);
         activeTab = name;
-        for (const tab of ['overview', 'catalog', 'chats', 'settings']) {
+        for (const tab of ['overview', 'catalog', 'chats', 'settings', 'ai']) {
           $(`${tab}-tab`).hidden = tab !== name;
         }
         for (const button of $('navigation').querySelectorAll('button')) {
@@ -263,6 +302,7 @@
         if (name === 'catalog') poll();
         if (name === 'chats') loadChats();
         if (name === 'settings') loadSettings();
+        if (name === 'ai') { pollAI(); loadAIModels(); }
       }
       function dataError(error) {
         if (error.status === 401) showLogin('Сессия истекла. Войдите снова.');
@@ -354,6 +394,109 @@
           $('setting-concurrency').value = values.catalog_sync_concurrency;
           $('setting-timeout').value = values.catalog_sync_timeout_seconds;
         } catch (error) { dataError(error); }
+      }
+      function aiButtons() {
+        const selected = $('ai-model').value;
+        const expiry = aiCheck ? Date.parse(aiCheck.expires_at) : NaN;
+        if (aiCheck && (aiCheck.model !== selected || !Number.isFinite(expiry) || expiry <= Date.now())) {
+          aiCheck = null;
+          text('ai-check-state', 'Проверка устарела. Проверьте модель снова.');
+        }
+        $('ai-model').disabled = aiBusy || !aiListLoaded;
+        $('ai-refresh').disabled = aiBusy;
+        $('ai-check').disabled = aiBusy || !aiListLoaded || !selected;
+        $('ai-apply').disabled = aiBusy || !aiCheck || aiCheck.model !== selected;
+      }
+      function invalidateAI(message = 'Модель не проверена.') {
+        aiCheck = null;
+        text('ai-check-state', message);
+        aiButtons();
+      }
+      function renderAI(status) {
+        aiStatus = status;
+        text('ai-active', status.active_model || '—');
+        text('ai-default', status.default_model || '—');
+        text('ai-override', status.override_model || 'Нет');
+        const health = status.health;
+        const healthCode = typeof health === 'string' ? health : (health?.status || health?.code || 'unknown');
+        const healthNames = {healthy:'Работает',unknown:'Не проверено',fallback_pending:'Переход на базовую',unavailable:'Недоступна',not_configured:'Не настроен'};
+        text('ai-health', status.configured ? (healthNames[healthCode] || healthCode) : 'Не настроен');
+        text('ai-last-checked', date(status.last_checked_at));
+        const incident = status.last_incident;
+        const incidentText = !incident ? 'Нет' : (typeof incident === 'string' ? incident :
+          `${incident.code || 'Сбой'}${incident.at ? ` · ${date(incident.at)}` : ''}${incident.fallback_to ? ` · переход на ${incident.fallback_to}` : ''}`);
+        text('ai-last-incident', String(incidentText).slice(0, 200));
+        aiButtons();
+      }
+      async function pollAI() {
+        clearTimeout(aiTimer);
+        if (!csrf || activeTab !== 'ai') return;
+        try { renderAI(await api('/api/admin/ai/status')); }
+        catch (error) { invalidateAI('Состояние недоступно; проверку нужно повторить.'); dataError(error); }
+        if (csrf && activeTab === 'ai') aiTimer = setTimeout(pollAI, 5000);
+      }
+      async function loadAIModels() {
+        invalidateAI();
+        aiBusy = true;
+        aiButtons();
+        try {
+          const result = await api('/api/admin/ai/models');
+          const select = $('ai-model');
+          select.replaceChildren();
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Выберите модель';
+          select.append(placeholder);
+          const models = Array.isArray(result.models) ? result.models.filter(value => typeof value === 'string') : [];
+          for (const model of models) {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            select.append(option);
+          }
+          if (models.includes(aiStatus?.active_model)) select.value = aiStatus.active_model;
+          aiListLoaded = true;
+          text('ai-list-time', `Список проверен: ${date(result.checked_at)}${result.cached ? ' (из кэша)' : ''}`);
+          if (!models.length) text('ai-check-state', 'Доступных моделей нет.');
+        } catch (error) {
+          aiListLoaded = false;
+          text('ai-list-time', 'Список моделей недоступен.');
+          dataError(error);
+        } finally { aiBusy = false; aiButtons(); }
+      }
+      async function checkAIModel() {
+        const model = $('ai-model').value;
+        if (!model || aiBusy) return;
+        invalidateAI('Проверяем выбранную модель…');
+        aiBusy = true;
+        aiButtons();
+        try {
+          const result = await api('/api/admin/ai/check', {method:'POST', body:JSON.stringify({model})});
+          if (result.status !== 'passed' || result.model !== model || !result.check_id) throw new Error('Проверка не завершилась успешно.');
+          aiCheck = result;
+          text('ai-check-state', `Проверка прошла. Примените до ${date(result.expires_at)}.`);
+          await pollAI();
+        } catch (error) {
+          invalidateAI('Проверка не прошла. Активная модель не изменена.');
+          dataError(error);
+        } finally { aiBusy = false; aiButtons(); }
+      }
+      async function applyAIModel() {
+        aiButtons();
+        if (!aiCheck || aiBusy) return;
+        const check = aiCheck;
+        aiBusy = true;
+        aiButtons();
+        try {
+          const status = await api('/api/admin/ai/activate', {method:'POST', body:JSON.stringify({model:check.model,check_id:check.check_id})});
+          invalidateAI('Модель применена. Для следующей смены нужна новая проверка.');
+          renderAI(status);
+          notice('Активная модель обновлена.');
+        } catch (error) {
+          invalidateAI('Применение не выполнено. Проверьте модель снова.');
+          dataError(error);
+          await pollAI();
+        } finally { aiBusy = false; aiButtons(); }
       }
       function render(status) {
         text('catalog-count', status.catalog_count ?? 0);
@@ -467,6 +610,10 @@
         } catch (error) { dataError(error); }
         finally { button.disabled = false; }
       });
+      $('ai-model').addEventListener('change', () => invalidateAI('Выбрана другая модель. Нужна новая проверка.'));
+      $('ai-refresh').addEventListener('click', loadAIModels);
+      $('ai-check').addEventListener('click', checkAIModel);
+      $('ai-apply').addEventListener('click', applyAIModel);
       async function action(path, body) {
         busy = true;
         $('refresh').disabled = $('full').disabled = $('cancel').disabled = true;

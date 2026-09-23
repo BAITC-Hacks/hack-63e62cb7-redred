@@ -9,7 +9,8 @@ from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy import text
 
-from . import admin, attachments, auth, cart, chat, favorites, sessions
+from . import admin, admin_ai, attachments, auth, cart, chat, favorites, sessions
+from .ai_control import AIModelControl
 from .catalog import CatalogService
 from .catalog_sync import CatalogSynchronizer
 from .config import get_settings
@@ -24,6 +25,8 @@ async def lifespan(app: FastAPI):
     async with httpx.AsyncClient(verify=ssl.create_default_context(), timeout=5.0) as http_client:
         settings = get_settings()
         app.state.catalog = CatalogService(get_session_factory(), http_client, settings)
+        app.state.ai_models = AIModelControl(get_session_factory(), http_client)
+        app.state.catalog.ai_model_control = app.state.ai_models
         app.state.catalog_sync = CatalogSynchronizer(get_engine(), get_session_factory(), app.state.catalog, settings)
         await app.state.catalog_sync.start()
         try:
@@ -49,6 +52,7 @@ app.include_router(cart.router)
 app.include_router(attachments.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
+app.include_router(admin_ai.router)
 
 
 @app.exception_handler(CatalogNotFound)
