@@ -2,11 +2,13 @@
 
 import ssl
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from typing import Literal
 
 import httpx
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from . import admin, admin_ai, attachments, auth, cart, chat, favorites, sessions
@@ -37,6 +39,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="HackAlem API", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[get_settings().app_origin],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-CSRF-Token"],
+)
 app.add_exception_handler(APIError, api_error_handler)
 
 
@@ -91,18 +100,35 @@ async def search_products(
     series: list[str] | None = Query(None),
     current: list[str] | None = Query(None),
     breaking_capacity: list[str] | None = Query(None),
+    has_documents: bool | None = None,
+    has_certificates: bool | None = None,
+    brand: list[str] | None = Query(None),
+    document_type: list[str] | None = Query(None),
+    min_price: Decimal | None = Query(None, ge=0, max_digits=18, decimal_places=2),
+    max_price: Decimal | None = Query(None, ge=0, max_digits=18, decimal_places=2),
     limit: int = Query(20, ge=1, le=20),
     offset: int = Query(0, ge=0),
 ) -> dict:
+    if min_price is not None and max_price is not None and min_price > max_price:
+        raise APIError(422, "INVALID_PRICE_RANGE", "Минимальная цена не может превышать максимальную")
     return await request.app.state.catalog.search_catalog(
         query=q, article=article,
         filters={
             "category": category, "in_stock": in_stock, "sort": sort,
             "series": series, "current": current,
             "breaking_capacity": breaking_capacity,
+            "has_documents": has_documents, "has_certificates": has_certificates,
+            "brand": brand, "document_type": document_type,
+            "min_price": str(min_price) if min_price is not None else None,
+            "max_price": str(max_price) if max_price is not None else None,
         },
         limit=limit, offset=offset,
     )
+
+
+@app.get("/api/products/facets")
+async def product_filter_facets(request: Request) -> dict:
+    return await request.app.state.catalog.get_filter_facets()
 
 
 @app.get("/api/products/{product_id}")
