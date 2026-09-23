@@ -54,23 +54,6 @@ type Message = {
   demo?: boolean
 }
 
-const quickActions = [
-  {
-    label: "Проверить наличие",
-    prompt:
-      "Проверь наличие 027228. Нужно 2 шт. и подготовь добавление в корзину.",
-  },
-  {
-    label: "Найти аналог",
-    prompt: "Найди аналог для 027105, которого нет в наличии.",
-  },
-  {
-    label: "Условия доставки и оплаты",
-    prompt: "Расскажи об условиях доставки, оплаты и минимальной партии.",
-  },
-  { label: "Загрузить спецификацию", upload: true },
-]
-
 const welcomeMessage: Message = {
   id: "welcome",
   role: "assistant",
@@ -479,10 +462,18 @@ export function ChatWidget() {
     setError(null)
     setBusy(true)
 
+    const streamingId = crypto.randomUUID()
     try {
-      const response = await sendChatMessage(trimmed, attachedFile)
+      const response = await sendChatMessage(trimmed, attachedFile, (delta) => {
+        setMessages((current) => {
+          const exists = current.some((item) => item.id === streamingId)
+          return exists
+            ? current.map((item) => item.id === streamingId ? { ...item, text: item.text + delta } : item)
+            : [...current, { id: streamingId, role: "assistant", text: delta }]
+        })
+      })
       setMessages((current) => [
-        ...current,
+        ...current.filter((item) => item.id !== streamingId),
         {
           id: response.message_id,
           role: "assistant",
@@ -491,6 +482,7 @@ export function ChatWidget() {
         },
       ])
     } catch (caught) {
+      setMessages((current) => current.filter((item) => item.id !== streamingId))
       if (!canUseDemoFallback(caught)) {
         setError(
           caught instanceof ChatApiError
@@ -698,26 +690,6 @@ export function ChatWidget() {
                 onResolve={handleProposal}
               />
             ))}
-            {messages.length === 1 ? (
-              <div className="grid grid-cols-2 gap-1.5">
-                {quickActions.map((action) => (
-                  <Button
-                    key={action.label}
-                    variant="outline"
-                    className="h-auto min-h-11 justify-start px-3 py-2 text-left text-xs leading-4 whitespace-normal"
-                    onClick={() => {
-                      if (action.upload) {
-                        fileInputRef.current?.click()
-                        return
-                      }
-                      void submit(action.prompt)
-                    }}
-                  >
-                    {action.label}
-                  </Button>
-                ))}
-              </div>
-            ) : null}
             {busy ? (
               <div className="max-w-[82%] space-y-2 rounded-xl border bg-white p-3">
                 <Skeleton className="h-3 w-36" />
