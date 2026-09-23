@@ -1,4 +1,4 @@
-"""Apply the initial PostgreSQL schema for the prototype.
+"""Apply additive PostgreSQL schema revisions for the prototype.
 
 Run from the repository root: python -m backend.migrate
 """
@@ -17,6 +17,8 @@ async def migrate() -> None:
         await connection.run_sync(Base.metadata.create_all)
         await connection.execute(text("CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"))
         await connection.execute(text("INSERT INTO schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING"))
+        await connection.execute(text("INSERT INTO schema_migrations(version) VALUES (2) ON CONFLICT DO NOTHING"))
+        await connection.execute(text("INSERT INTO schema_migrations(version) VALUES (3) ON CONFLICT DO NOTHING"))
     await engine.dispose()
 
 

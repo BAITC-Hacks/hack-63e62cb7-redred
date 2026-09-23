@@ -26,7 +26,7 @@ from backend.dependencies import require_mutation_session, require_session
 from backend.ekt_client import CatalogNotFound, CatalogUnavailable
 from backend.errors import APIError
 from backend.models import Message, Session
-from backend.sessions import COOKIE_NAME, resolve_session_from_cookie, validate_origin
+from backend.sessions import CLIENT_COOKIE_NAME, COOKIE_NAME, resolve_session_from_cookie, validate_origin
 from backend.chat_language import action, language_request, select_language, message as local_message
 from backend.chat_memory import search_history
 
@@ -36,6 +36,10 @@ Publish = Callable[[str, dict[str, Any]], Awaitable[None]]
 _active: dict[UUID, tuple[UUID, str]] = {}
 _rates: dict[UUID, deque[float]] = defaultdict(deque)
 _global_active = 0
+
+
+def is_session_busy(session_id: UUID) -> bool:
+    return session_id in _active
 
 
 class MessageInput(BaseModel):
@@ -395,15 +399,27 @@ async def websocket_chat(websocket: WebSocket) -> None:
         await websocket.close(code=4403)
         return
     async with get_session_factory()() as db:
-        session = await resolve_session_from_cookie(db, websocket.cookies.get(COOKIE_NAME))
+        session = await resolve_session_from_cookie(
+            db, websocket.cookies.get(COOKIE_NAME), websocket.cookies.get(CLIENT_COOKIE_NAME),
+        )
         if session is None:
             await websocket.close(code=4401)
             return
+        session_id = session.id
         await websocket.accept()
         while True:
             try:
                 incoming = await websocket.receive_json()
             except WebSocketDisconnect:
+                return
+            # A websocket's handshake cookie is immutable. Recheck it for every
+            # message so logout revokes an already-open connection as well.
+            await db.rollback()
+            session = await resolve_session_from_cookie(
+                db, websocket.cookies.get(COOKIE_NAME), websocket.cookies.get(CLIENT_COOKIE_NAME),
+            )
+            if session is None or session.id != session_id:
+                await websocket.close(code=4401)
                 return
             request_id = incoming.get("request_id", "") if isinstance(incoming, dict) else ""
             seq = 0

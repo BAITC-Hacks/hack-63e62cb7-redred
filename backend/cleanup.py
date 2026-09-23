@@ -5,17 +5,21 @@ Run from repository root: python -m backend.cleanup
 
 import asyncio
 
-from sqlalchemy import delete
+from sqlalchemy import delete, exists, select
 
 from .attachments import cleanup_expired
 from .db import get_session_factory
-from .models import Session, utcnow
+from .models import ClientLogin, Session, User, utcnow
 
 
 async def cleanup() -> tuple[int, int]:
     async with get_session_factory()() as db:
         attachments = await cleanup_expired(db)
-        result = await db.execute(delete(Session).where(Session.expires_at <= utcnow()))
+        await db.execute(delete(ClientLogin).where(ClientLogin.expires_at <= utcnow()))
+        result = await db.execute(delete(Session).where(
+            Session.expires_at <= utcnow(),
+            ~exists(select(User.id).where(User.session_id == Session.id)),
+        ))
         await db.commit()
     return attachments, result.rowcount
 

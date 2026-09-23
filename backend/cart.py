@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .config import get_settings
 from .db import get_db
 from .dependencies import require_mutation_session, require_session
+from .ekt_client import CatalogNotFound, CatalogUnavailable
 from .errors import APIError
 from .models import Cart, CartItem, CartProposal, Session, utcnow
 from .chat_language import message as local_message
@@ -180,10 +181,9 @@ async def _fetch_products(catalog, ids: list[int]) -> dict[int, dict]:
         try:
             product = await catalog.get_product(product_id, fresh=True)
         except Exception as exc:
-            name = type(exc).__name__
-            if name == "CatalogNotFound":
+            if isinstance(exc, CatalogNotFound):
                 raise APIError(404, "PRODUCT_NOT_FOUND", "Товар не найден") from exc
-            if name == "CatalogUnavailable":
+            if isinstance(exc, CatalogUnavailable):
                 raise APIError(502, "CATALOG_UNAVAILABLE", "Каталог сейчас недоступен") from exc
             raise
         return product_id, product
