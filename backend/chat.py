@@ -279,7 +279,7 @@ async def handle_message(
                 "proposal": proposal, "cart": None, "cart_url": None, "warnings": result.warnings,
             })
 
-        result = await asyncio.wait_for(work(), timeout=20 if rows else 8)
+        result = await asyncio.wait_for(work(), timeout=40 if rows else 28)
         await publish("assistant.completed", result)
         return result
     except asyncio.TimeoutError as exc:

@@ -324,7 +324,7 @@ export async function sendChatMessage(text: string, attachment?: File | null, on
         if (result) resolve(result)
         else reject(error ?? new ChatApiError("Соединение с ассистентом прервано. Повторите запрос.", "STREAM_CLOSED"))
       }
-      const timer = window.setTimeout(() => finish(undefined, new ChatApiError("Время ожидания ответа истекло.", "STREAM_TIMEOUT")), 30000)
+      const timer = window.setTimeout(() => finish(undefined, new ChatApiError("Время ожидания ответа истекло.", "STREAM_TIMEOUT")), 50000)
       socket.onopen = () => socket.send(JSON.stringify({type: "message.send", request_id: requestId, text, attachment_ids: attachmentIds, language: null}))
       socket.onmessage = (event) => {
         try {

@@ -132,7 +132,7 @@ class AIModelControl:
                 try:
                     response = await self.http_client.get(
                         "https://api.openai.com/v1/models",
-                        headers={"Authorization": f"Bearer {key}"}, timeout=6.0,
+                        headers={"Authorization": f"Bearer {key}"}, timeout=26.0,
                     )
                     if response.status_code in (401, 403):
                         raise APIError(502, "OPENAI_AUTH_FAILED", "OpenAI отклонил серверный ключ")
