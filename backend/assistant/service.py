@@ -204,6 +204,30 @@ class Evidence:
             return {"error": "LOOKUP_FAILED", "instruction": "Facts could not be verified. Ask to retry; do not invent facts."}
 
 
+class _ModelUnavailable(Exception):
+    """An attempt failed before a usable model response was received."""
+
+
+def _can_try_backup(response: httpx.Response) -> bool:
+    status = response.status_code
+    if status == 401:
+        return True
+    if response.headers.get("Retry-After"):
+        return False
+    if status == 429:
+        try:
+            body = response.json()
+            error = body.get("error", {}) if isinstance(body, dict) else {}
+            code = error.get("code") if isinstance(error, dict) else None
+        except ValueError:
+            code = None
+        return code not in {
+            "credit_balance_exhausted", "organization_spend_limit_exceeded",
+            "project_spend_limit_exceeded", "organization_usage_limit_exceeded",
+        }
+    return status in {408, 409} or 500 <= status < 600
+
+
 async def _request(client: httpx.AsyncClient, payload: dict) -> dict:
     try:
         response = await client.post("https://api.openai.com/v1/responses", json=payload)
@@ -212,8 +236,37 @@ async def _request(client: httpx.AsyncClient, payload: dict) -> dict:
         if not isinstance(data, dict) or data.get("status") != "completed":
             raise ValueError("incomplete response")
         return data
-    except (httpx.HTTPError, ValueError) as exc:
+    except httpx.HTTPStatusError as exc:
+        if _can_try_backup(exc.response):
+            raise _ModelUnavailable() from None
         raise APIError(503, "ASSISTANT_UNAVAILABLE", "Не удалось получить ответ AI. Повторите запрос.") from None
+    except (httpx.RequestError, ValueError):
+        raise _ModelUnavailable() from None
+
+
+async def _call_model(
+    payload: dict, keys: list[str], *,
+    on_text: Callable[[str], Awaitable[None]] | None = None,
+    can_retry: Callable[[], bool] | None = None,
+    on_retry: Callable[[], None] | None = None,
+) -> tuple[dict, str]:
+    """Try the second server-side key once, without repeating visible text."""
+    for index, key in enumerate(keys):
+        async with httpx.AsyncClient(
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=httpx.Timeout(6.5, connect=2.0), verify=ssl.create_default_context(),
+        ) as client:
+            try:
+                if on_text is None:
+                    return await _request(client, payload), key
+                return await _stream_request(client, payload, on_text), key
+            except _ModelUnavailable:
+                if index + 1 < len(keys) and (can_retry is None or can_retry()):
+                    if on_retry is not None:
+                        on_retry()
+                    continue
+        raise APIError(503, "ASSISTANT_UNAVAILABLE", "Не удалось получить ответ AI. Повторите запрос.") from None
+    raise APIError(503, "ASSISTANT_UNAVAILABLE", "AI не настроен: требуется серверный ключ OpenAI.")
 
 
 class _TextFieldStream:
@@ -310,8 +363,12 @@ async def _stream_request(
         if not isinstance(completed, dict) or completed.get("status") != "completed":
             raise ValueError("incomplete streaming response")
         return completed
-    except (httpx.HTTPError, ValueError, TypeError) as exc:
+    except httpx.HTTPStatusError as exc:
+        if _can_try_backup(exc.response):
+            raise _ModelUnavailable() from None
         raise APIError(503, "ASSISTANT_UNAVAILABLE", "Не удалось получить потоковый ответ AI. Повторите запрос.") from None
+    except (httpx.RequestError, ValueError, TypeError):
+        raise _ModelUnavailable() from None
 
 
 def _validate_result(result: AssistantResult, evidence: Evidence, context: AssistantContext) -> None:
@@ -341,8 +398,11 @@ def _validate_result(result: AssistantResult, evidence: Evidence, context: Assis
 
 async def reply(context: AssistantContext, tools: Any, emit: Emit) -> AssistantResult:
     """Entry point called by backend.chat; only read tools can precede streamed text."""
-    key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not key:
+    keys = list(dict.fromkeys(key for key in (
+        os.getenv("OPENAI_API_KEY", "").strip(),
+        os.getenv("OPENAI_FALLBACK_API_KEY", "").strip(),
+    ) if key))
+    if not keys:
         raise APIError(503, "ASSISTANT_UNAVAILABLE", "AI не настроен: требуется серверный ключ OpenAI.")
     content = [{"type": "input_text", "text": context.text or "Разбери вложенные позиции."}]
     if context.attachments:
@@ -369,24 +429,28 @@ async def reply(context: AssistantContext, tools: Any, emit: Emit) -> AssistantR
         if delta:
             await emit({"type": "text.delta", "text": delta})
 
+    def reset_stream() -> None:
+        nonlocal streamed
+        streamed = _TextFieldStream()
+
     await emit({"type": "status", "stage": "generating"})
-    async with httpx.AsyncClient(
-        headers={"Authorization": f"Bearer {key}"},
-        timeout=httpx.Timeout(6.5, connect=2.0), verify=ssl.create_default_context(),
-    ) as client:
-        data = await _request(client, payload)
-        calls = [item for item in data.get("output", []) if item.get("type") == "function_call"]
-        if calls:
-            if len(calls) > 4:
-                raise APIError(502, "ASSISTANT_INVALID_RESULT", "Слишком сложный запрос. Уточните до трёх товаров.")
-            await emit({"type": "status", "stage": "searching_catalog"})
-            outputs = await asyncio.gather(*(evidence.execute(c["name"], c["arguments"]) for c in calls))
-            inputs.extend(data["output"])
-            inputs.extend({"type": "function_call_output", "call_id": c["call_id"], "output": _json(out)}
-                          for c, out in zip(calls, outputs))
-            payload["tool_choice"] = "none"
-            await emit({"type": "status", "stage": "generating"})
-            data = await _stream_request(client, payload, forward_json)
+    data, active_key = await _call_model(payload, keys)
+    calls = [item for item in data.get("output", []) if item.get("type") == "function_call"]
+    if calls:
+        if len(calls) > 4:
+            raise APIError(502, "ASSISTANT_INVALID_RESULT", "Слишком сложный запрос. Уточните до трёх товаров.")
+        await emit({"type": "status", "stage": "searching_catalog"})
+        outputs = await asyncio.gather(*(evidence.execute(c["name"], c["arguments"]) for c in calls))
+        inputs.extend(data["output"])
+        inputs.extend({"type": "function_call_output", "call_id": c["call_id"], "output": _json(out)}
+                      for c, out in zip(calls, outputs))
+        payload["tool_choice"] = "none"
+        await emit({"type": "status", "stage": "generating"})
+        stream_keys = keys if active_key == keys[0] else [active_key]
+        data, _ = await _call_model(
+            payload, stream_keys, on_text=forward_json,
+            can_retry=lambda: not streamed.emitted, on_retry=reset_stream,
+        )
     text = "".join(part.get("text", "") for item in data.get("output", [])
                    if item.get("type") == "message" for part in item.get("content", [])
                    if part.get("type") == "output_text")

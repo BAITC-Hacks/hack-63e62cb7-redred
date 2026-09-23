@@ -7,6 +7,8 @@ import unittest
 from unittest.mock import AsyncMock, patch
 import zipfile
 
+import httpx
+
 from backend.assistant import service
 from backend.assistant.files import office_text, attachment_content
 from backend.assistant_contract import AssistantContext
@@ -92,10 +94,67 @@ class AssistantTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private-secret", json.dumps(result))
 
     async def test_no_key_fails_before_model_call(self):
-        with patch.dict("os.environ", {"OPENAI_API_KEY": ""}), patch.object(service, "_request", AsyncMock()) as model:
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "", "OPENAI_FALLBACK_API_KEY": ""}), \
+             patch.object(service, "_request", AsyncMock()) as model:
             with self.assertRaises(APIError):
                 await service.reply(AssistantContext(text="test"), self.tools, self.emit)
             model.assert_not_awaited()
+
+    async def test_backup_key_after_primary_failure(self):
+        attempted = []
+
+        async def request(client, _payload):
+            attempted.append(client.headers["Authorization"])
+            if len(attempted) == 1:
+                raise service._ModelUnavailable()
+            return final(product_ids=[])
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "primary", "OPENAI_FALLBACK_API_KEY": "backup"}), \
+             patch.object(service, "_request", side_effect=request):
+            result = await service.reply(AssistantContext(text="test"), self.tools, self.emit)
+        self.assertEqual(attempted, ["Bearer primary", "Bearer backup"])
+        self.assertEqual(result.text, "Проверенный ответ")
+
+    async def test_backup_key_for_stream_before_visible_text(self):
+        attempted = []
+        answer = final()
+
+        async def stream(client, payload, on_text):
+            attempted.append(client.headers["Authorization"])
+            if len(attempted) == 1:
+                await on_text('{"language":"ru","text":"')
+                raise service._ModelUnavailable()
+            return await streamed_result(client, payload, on_text, answer)
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "primary", "OPENAI_FALLBACK_API_KEY": "backup"}), \
+             patch.object(service, "_request", AsyncMock(return_value=call())), \
+             patch.object(service, "_stream_request", side_effect=stream):
+            result = await service.reply(AssistantContext(text="test"), self.tools, self.emit)
+        self.assertEqual(attempted, ["Bearer primary", "Bearer backup"])
+        deltas = [c.args[0]["text"] for c in self.emit.await_args_list if c.args[0]["type"] == "text.delta"]
+        self.assertEqual("".join(deltas), result.text)
+
+    async def test_no_backup_after_visible_text(self):
+        attempted = []
+
+        async def stream(client, _payload, on_text):
+            attempted.append(client.headers["Authorization"])
+            await on_text('{"language":"ru","text":"Часть')
+            raise service._ModelUnavailable()
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "primary", "OPENAI_FALLBACK_API_KEY": "backup"}), \
+             patch.object(service, "_request", AsyncMock(return_value=call())), \
+             patch.object(service, "_stream_request", side_effect=stream):
+            with self.assertRaises(APIError):
+                await service.reply(AssistantContext(text="test"), self.tools, self.emit)
+        self.assertEqual(attempted, ["Bearer primary"])
+
+    def test_backup_eligibility_respects_quota_and_retry_after(self):
+        self.assertTrue(service._can_try_backup(httpx.Response(401)))
+        self.assertFalse(service._can_try_backup(httpx.Response(400)))
+        self.assertFalse(service._can_try_backup(httpx.Response(
+            429, json={"error": {"code": "credit_balance_exhausted"}})))
+        self.assertFalse(service._can_try_backup(httpx.Response(503, headers={"Retry-After": "30"})))
 
     async def test_invalid_model_json_is_safe(self):
         data = {"status": "completed", "output": [{"type": "message", "content": [{"type": "output_text", "text": "garbage"}]}]}
