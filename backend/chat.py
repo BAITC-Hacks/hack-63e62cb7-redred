@@ -27,6 +27,8 @@ from backend.ekt_client import CatalogNotFound, CatalogUnavailable
 from backend.errors import APIError
 from backend.models import Message, Session
 from backend.sessions import COOKIE_NAME, resolve_session_from_cookie, validate_origin
+from backend.chat_language import action, language_request, select_language, message as local_message
+from backend.chat_memory import search_history
 
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -34,7 +36,6 @@ Publish = Callable[[str, dict[str, Any]], Awaitable[None]]
 _active: dict[UUID, tuple[UUID, str]] = {}
 _rates: dict[UUID, deque[float]] = defaultdict(deque)
 _global_active = 0
-_CONFIRM = {"да, добавь", "да добавь", "подтверждаю добавление"}
 
 
 class MessageInput(BaseModel):
@@ -129,7 +130,7 @@ async def handle_message(
     db: AsyncSession, session: Session, body: MessageInput, catalog: Any, publish: Publish,
 ) -> dict:
     session_id = session.id
-    selected_language = body.language or session.preferred_language or "ru"
+    selected_language = select_language(body.text, body.language, session.preferred_language)
     active = _active.get(session_id)
     if active:
         if active == (body.request_id, _fingerprint(body)):
@@ -149,6 +150,8 @@ async def handle_message(
     user_message: Message | None = None
     user_id: UUID | None = None
     proposal_id: str | None = None
+    confirming_id: str | None = None
+    deltas: list[str] = []
     try:
         rows = await owned_attachments(db, session, body.attachment_ids)
         if not body.text.strip() and not rows:
@@ -160,24 +163,35 @@ async def handle_message(
             attachment_ids=[str(item) for item in body.attachment_ids], status="processing",
         )
         db.add(user_message)
-        if body.language:
-            session.preferred_language = body.language
+        requested_language = body.language or language_request(body.text)
+        if requested_language:
+            session.preferred_language = requested_language
         await db.commit()
         await publish("message.accepted", {"message_id": str(user_id)})
 
         async def work() -> dict:
-            normalized = re.sub(r"\s+", " ", body.text.strip().lower())
-            if normalized in _CONFIRM and not rows:
+            consent = action(body.text)
+            if consent and not rows:
                 pending = await get_pending_proposal(db, session)
                 if pending is None:
-                    phrase = "Нет действующего предложения для подтверждения. Выберите товары заново."
+                    phrase = local_message("no_proposal", selected_language)
                     await publish("assistant.delta", {"text": phrase})
                     return await _save_result(db, session_id, user_id, body.request_id, {
                         "language": selected_language, "text": phrase,
                         "products": [], "proposal": None, "cart": None, "cart_url": None, "warnings": [],
                     })
-                confirmation = await confirm_proposal(db, session, UUID(str(pending["id"])), catalog)
-                phrase = "Товары добавлены в корзину."
+                if consent == "cancel":
+                    await cancel_proposal(db, session, pending["id"])
+                    phrase = local_message("cancelled", selected_language)
+                    await publish("assistant.delta", {"text": phrase})
+                    return await _save_result(db, session_id, user_id, body.request_id, {
+                        "language": selected_language, "text": phrase, "products": [], "proposal": None,
+                        "cart": None, "cart_url": None, "warnings": [],
+                    })
+                nonlocal confirming_id
+                confirming_id = str(pending["id"])
+                confirmation = await confirm_proposal(db, session, UUID(confirming_id), catalog)
+                phrase = local_message("added", selected_language)
                 await publish("assistant.delta", {"text": phrase})
                 return await _save_result(db, session_id, user_id, body.request_id, {
                     "language": selected_language, "text": phrase,
@@ -195,16 +209,18 @@ async def handle_message(
             cart = await get_cart_payload(db, session)
             pending = await get_pending_proposal(db, session)
             context = AssistantContext(
-                text=body.text, language=body.language or session.preferred_language,
+                text=body.text, language=selected_language,
                 history=await _history(db, session_id, user_id),
                 attachments=[AttachmentContext(
                     id=str(row.id), filename=row.filename, media_type=row.media_type,
                     storage_path=row.storage_path,
                 ) for row in rows],
                 cart=cart, pending_proposal=pending,
+                conversation_state=session.state or {},
             )
-            tools = AssistantTools(catalog, cart)
-            deltas: list[str] = []
+            async def recall(query: str) -> dict:
+                return await search_history(get_session_factory(), session_id, query)
+            tools = AssistantTools(catalog, cart, history_search=recall)
             total_chars = 0
 
             async def emit(event: dict[str, str]) -> None:
@@ -268,6 +284,30 @@ async def handle_message(
             await db.execute(update(Message).where(Message.id == user_id).values(status="failed"))
             await db.commit()
         raise APIError(504, "REQUEST_TIMEOUT", "Время обработки сообщения истекло") from exc
+    except APIError as exc:
+        await db.rollback()
+        recovery = {"INSUFFICIENT_STOCK": "stock", "INVALID_QUANTITY": "quantity", "PRICE_CHANGED": "price"}
+        if user_id is not None and exc.code in recovery:
+            if confirming_id:
+                await cancel_proposal(db, SimpleNamespace(id=session_id), confirming_id)
+            owner = await db.get(Session, session_id, populate_existing=True)
+            owner.state = {**(owner.state or {}), "last_cart_error": {"code": exc.code, **exc.details}}
+            if exc.details.get("product_id"):
+                owner.state = {**owner.state, "last_product_ids": [exc.details["product_id"]]}
+            phrase = local_message(recovery[exc.code], selected_language, exc.details)
+            prefix = "\n\n" if deltas else ""
+            await publish("assistant.delta", {"text": prefix + phrase})
+            result = await _save_result(db, session_id, user_id, body.request_id, {
+                "language": selected_language, "text": "".join(deltas) + prefix + phrase,
+                "products": [], "proposal": None, "cart": await get_cart_payload(db, session_id),
+                "cart_url": None, "warnings": [exc.code],
+            })
+            await publish("assistant.completed", result)
+            return result
+        if user_id is not None:
+            await db.execute(update(Message).where(Message.id == user_id).values(status="failed"))
+            await db.commit()
+        raise
     except Exception:
         await db.rollback()
         if proposal_id is not None:
@@ -291,6 +331,18 @@ async def _save_result(db: AsyncSession, session_id: UUID, user_id: UUID, reques
         attachment_ids=[], status="completed", result=data,
     )
     db.add(assistant)
+    owner = await db.get(Session, session_id)
+    if owner is not None:
+        state = dict(owner.state or {})
+        if payload.get("products"):
+            state["last_product_ids"] = [p["id"] for p in payload["products"][:3]]
+        if payload.get("proposal"):
+            state["last_requested_items"] = [
+                {"product_id": p["product_id"], "quantity": p["quantity"]}
+                for p in payload["proposal"]["items"][:3]
+            ]
+            state.pop("last_cart_error", None)
+        owner.state = state
     await db.execute(update(Message).where(Message.id == user_id).values(status="completed"))
     await db.commit()
     return data

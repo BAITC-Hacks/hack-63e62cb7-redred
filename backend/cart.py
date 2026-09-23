@@ -13,6 +13,7 @@ from .db import get_db
 from .dependencies import require_mutation_session, require_session
 from .errors import APIError
 from .models import Cart, CartItem, CartProposal, Session, utcnow
+from .chat_language import message as local_message
 
 
 router = APIRouter(prefix="/api/cart", tags=["cart"])
@@ -352,14 +353,45 @@ async def get_cart(request: Request, session: Session = Depends(require_session)
 
 @router.post("/proposals")
 async def post_proposal(body: ProposalIn, request: Request, session: Session = Depends(require_mutation_session), db: AsyncSession = Depends(get_db)) -> dict:
-    return await create_proposal(db, session, [item.model_dump() for item in body.items], request.app.state.catalog)
+    session_id = session.id
+    try:
+        return await create_proposal(db, session, [item.model_dump() for item in body.items], request.app.state.catalog)
+    except APIError as exc:
+        await _remember_rejection(db, session_id, exc)
+        raise
+
+
+async def _remember_rejection(db: AsyncSession, session_id: uuid.UUID, exc: APIError, proposal_id=None) -> None:
+    recovery = {"INSUFFICIENT_STOCK": "stock", "INVALID_QUANTITY": "quantity", "PRICE_CHANGED": "price"}
+    if exc.code not in recovery:
+        return
+    await db.rollback()
+    owner = await db.get(Session, session_id)
+    if proposal_id:
+        await cancel_proposal(db, owner, proposal_id)
+    owner.state = {**(owner.state or {}), "last_cart_error": {"code": exc.code, **exc.details}}
+    if exc.details.get("product_id"):
+        owner.state = {**owner.state, "last_product_ids": [exc.details["product_id"]]}
+    exc.message = local_message(recovery[exc.code], owner.preferred_language or "ru", exc.details)
+    await db.commit()
 
 
 @router.post("/proposals/{proposal_id}/confirm")
 async def post_confirm(proposal_id: uuid.UUID, body: ConfirmIn, request: Request, session: Session = Depends(require_mutation_session), db: AsyncSession = Depends(get_db)) -> dict:
     if body.confirmed is not True:
         raise APIError(422, "CONFIRMATION_REQUIRED", "Для добавления требуется confirmed: true")
-    return await confirm_proposal(db, session, proposal_id, request.app.state.catalog)
+    session_id = session.id
+    try:
+        result = await confirm_proposal(db, session, proposal_id, request.app.state.catalog)
+        owner = await db.get(Session, session_id)
+        state = dict(owner.state or {})
+        state.pop("last_cart_error", None)
+        owner.state = state
+        await db.commit()
+        return result
+    except APIError as exc:
+        await _remember_rejection(db, session_id, exc, proposal_id)
+        raise
 
 
 @router.post("/proposals/{proposal_id}/cancel")

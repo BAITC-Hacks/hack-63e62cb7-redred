@@ -26,6 +26,7 @@ class AssistantContext(BaseModel):
     attachments: list[AttachmentContext] = Field(default_factory=list)
     cart: dict[str, Any] = Field(default_factory=dict)
     pending_proposal: dict[str, Any] | None = None
+    conversation_state: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProposedItem(BaseModel):

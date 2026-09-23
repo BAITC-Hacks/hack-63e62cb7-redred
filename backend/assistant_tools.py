@@ -8,9 +8,10 @@ from typing import Any
 
 
 class AssistantTools:
-    def __init__(self, catalog: Any, cart: dict[str, Any]):
+    def __init__(self, catalog: Any, cart: dict[str, Any], history_search: Any = None):
         self._catalog = catalog
         self._cart = cart
+        self._history_search = history_search
         self._product_tasks: dict[tuple[int, bool], asyncio.Task] = {}
         self._lookups = 0
 
@@ -48,6 +49,11 @@ class AssistantTools:
 
     async def get_cart(self) -> dict:
         return self._cart
+
+    async def search_history(self, query: str) -> dict:
+        if self._history_search is None:
+            return {"items": []}
+        return await self._history_search(query)
 
 
 class CachedProposalCatalog:

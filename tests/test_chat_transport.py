@@ -10,7 +10,7 @@ from sqlalchemy import delete
 
 from backend import chat
 from backend.assistant_contract import AssistantResult, ProposedItem
-from backend.db import get_session_factory
+from backend.db import get_engine, get_session_factory
 from backend.main import app
 from backend.models import Session
 from backend.sessions import COOKIE_NAME, resolve_session_from_cookie
@@ -49,6 +49,7 @@ class ChatTransportTest(unittest.IsolatedAsyncioTestCase):
                 if session is not None:
                     await db.execute(delete(Session).where(Session.id == session.id))
             await db.commit()
+        await get_engine().dispose()
 
     async def _session(self):
         response = await self.client.post("/api/session", json={})

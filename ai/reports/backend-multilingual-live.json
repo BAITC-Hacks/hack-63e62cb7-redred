@@ -1,0 +1,84 @@
+[
+  {
+    "case": "kazakh",
+    "status": 200,
+    "language": "kk",
+    "duration_seconds": 6.25,
+    "passed": true,
+    "text": "010500006_ — IEK ВА47-29 бір полюсті автоматты ажыратқышы: 16 А, 230 В, іске қосылу сипаттамасы C, ажырату қабілеті 4,5 кА. Тарату және топтық тізбектерді қорғауға арналған. Барлық қоймалардағы жалпы қалдық — 109 337 дана. Бағасы 768 ₸/дана; 2 данаға — 1 536 ₸. [Сертификат 004 MVA20-1-016-C](https://ekt.kz/upload/iblock/d73/cg4iz2mfi5d8v86yygje3moxllyoq0w2/Sertifikat-004-MVA20_1_016_C.pdf). 2 данаға ұсынысты растайсыз ба? Әзірге себетке қосылған жоқ.",
+    "error": null,
+    "tools": [
+      {
+        "tool": "search_catalog",
+        "arguments": {
+          "query": "010500006_",
+          "article": "010500006_",
+          "required_quantity": "2"
+        },
+        "error": null,
+        "item_count": 1
+      }
+    ]
+  },
+  {
+    "case": "english_analog",
+    "status": 200,
+    "language": "en",
+    "duration_seconds": 5.046,
+    "passed": true,
+    "text": "Article 010500139_ is unavailable: 0 pieces across all warehouses. An available alternative is 010500006_ (IEK), with 109,337 pieces across all warehouses at 768 KZT per piece. Both are 1-pole, 16 A, 230 V, type C breakers rated at 4.5 kA. The difference is the brand—IEK rather than GENERICA—and price (the unavailable item is listed at 394 KZT). Check suitability for your installation before substituting. How many pieces do you need?",
+    "error": null,
+    "tools": [
+      {
+        "tool": "search_catalog",
+        "arguments": {
+          "query": "010500139_",
+          "article": "010500139_",
+          "required_quantity": null
+        },
+        "error": null,
+        "item_count": 1
+      }
+    ]
+  },
+  {
+    "case": "mixed_quantity",
+    "status": 200,
+    "language": "kk",
+    "duration_seconds": 5.609,
+    "passed": true,
+    "text": "010500006_ артикулынан 999999 данаға қор жетпейді. Барлық қоймалар бойынша қазір 109337 дана бар, яғни 890662 дана жетіспейді. Тексерілген балама табылмады. Қолда бар 109337 дананы немесе одан аз мөлшерді қарастырғыңыз келсе, нақты санын айтыңыз; бастапқы сұранысты өз бетімше азайтпаймын.",
+    "error": null,
+    "tools": [
+      {
+        "tool": "search_catalog",
+        "arguments": {
+          "query": "010500006_",
+          "article": "010500006_",
+          "required_quantity": "999999"
+        },
+        "error": null,
+        "item_count": 1
+      }
+    ]
+  },
+  {
+    "case": "long_session",
+    "status": 200,
+    "language": "kk",
+    "duration_seconds": 4.844,
+    "passed": true,
+    "text": "Тарихтан IEK ВА47-29 автоматын таптым: 1 полюсті, 16 А, C сипаттамалы, артикулы 010500006_. 2 данаға ұсыныс: әрқайсысы 768 ₸, барлығы 1 536 ₸. Барлық қоймалардағы жалпы қор 109 337 дана; себет бос. Бұл ұсыныс қана, тауар себетке қосылған жоқ. 2 дананы себетке қосу ұсынысын растайсыз ба?",
+    "error": null,
+    "tools": [
+      {
+        "tool": "search_history",
+        "arguments": {
+          "query": "IEK автомат"
+        },
+        "error": null,
+        "item_count": 1
+      }
+    ]
+  }
+]
