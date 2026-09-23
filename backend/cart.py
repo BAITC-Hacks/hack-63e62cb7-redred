@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,18 @@ class ProposalIn(BaseModel):
 
 
 class ConfirmIn(BaseModel):
-    confirmed: bool
+    confirmed: StrictBool
+
+
+class ManualMutationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirmed: StrictBool
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
+
+
+class SetQuantityIn(ManualMutationIn):
+    quantity: str
 
 
 def decimal_value(value: object, code: str = "INVALID_QUANTITY") -> Decimal:
@@ -126,7 +137,7 @@ def _public_proposal(proposal: CartProposal) -> dict:
 async def _cart_row(db: AsyncSession, session_id: uuid.UUID, *, lock: bool = False) -> Cart:
     statement = select(Cart).where(Cart.session_id == session_id)
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     cart = await db.scalar(statement)
     if cart is None:
         raise APIError(500, "CART_MISSING", "Корзина сессии не найдена")
@@ -134,7 +145,7 @@ async def _cart_row(db: AsyncSession, session_id: uuid.UUID, *, lock: bool = Fal
 
 
 async def _cart_items(db: AsyncSession, cart_id: uuid.UUID) -> list[CartItem]:
-    return list((await db.scalars(select(CartItem).where(CartItem.cart_id == cart_id).order_by(CartItem.product_id))).all())
+    return list((await db.scalars(select(CartItem).where(CartItem.cart_id == cart_id).order_by(CartItem.product_id).execution_options(populate_existing=True))).all())
 
 
 async def get_cart_payload(db: AsyncSession, session: Session | uuid.UUID) -> dict:
@@ -214,6 +225,105 @@ def _check_stock(values: dict, existing: Decimal) -> None:
         )
 
 
+def _require_manual_confirmation(body: ManualMutationIn) -> None:
+    if body.confirmed is not True:
+        raise APIError(422, "CONFIRMATION_REQUIRED", "Для изменения корзины требуется confirmed: true")
+
+
+async def _locked_manual_cart(db: AsyncSession, session_id: uuid.UUID, expected_revision: int | None) -> Cart:
+    await db.scalar(select(Session.id).where(Session.id == session_id).with_for_update())
+    cart = await _cart_row(db, session_id, lock=True)
+    if expected_revision is not None and cart.revision != expected_revision:
+        raise APIError(409, "CART_CHANGED", "Корзина изменилась; обновите её перед действием")
+    return cart
+
+
+async def _replace_pending(db: AsyncSession, session_id: uuid.UUID) -> None:
+    pending = (await db.scalars(
+        select(CartProposal)
+        .where(CartProposal.session_id == session_id, CartProposal.status == "pending")
+        .with_for_update()
+    )).all()
+    for proposal in pending:
+        proposal.status = "replaced"
+
+
+async def remove_cart_item(db: AsyncSession, session: Session, product_id: int, expected_revision: int | None) -> dict:
+    if product_id <= 0:
+        raise APIError(422, "INVALID_PRODUCT_ID", "Некорректный ID товара")
+    session_id = session.id
+    await db.commit()
+    async with db.begin():
+        cart = await _locked_manual_cart(db, session_id, expected_revision)
+        row = await db.scalar(select(CartItem).where(
+            CartItem.cart_id == cart.id, CartItem.product_id == product_id,
+        ).execution_options(populate_existing=True))
+        if row is not None:
+            await db.delete(row)
+            cart.revision += 1
+            await _replace_pending(db, session_id)
+            await db.flush()
+        return await get_cart_payload(db, session_id)
+
+
+async def clear_cart_items(db: AsyncSession, session: Session, expected_revision: int | None) -> dict:
+    session_id = session.id
+    await db.commit()
+    async with db.begin():
+        cart = await _locked_manual_cart(db, session_id, expected_revision)
+        rows = await _cart_items(db, cart.id)
+        if rows:
+            for row in rows:
+                await db.delete(row)
+            cart.revision += 1
+            await _replace_pending(db, session_id)
+            await db.flush()
+        return await get_cart_payload(db, session_id)
+
+
+async def set_cart_item_quantity(
+    db: AsyncSession, session: Session, product_id: int, quantity: str,
+    expected_revision: int | None, catalog,
+) -> dict:
+    if product_id <= 0:
+        raise APIError(422, "INVALID_PRODUCT_ID", "Некорректный ID товара")
+    amount = quantity_value(quantity)
+    session_id = session.id
+    preflight_cart = await _cart_row(db, session_id)
+    if expected_revision is not None and preflight_cart.revision != expected_revision:
+        raise APIError(409, "CART_CHANGED", "Корзина изменилась; обновите её перед действием")
+    preflight_item = await db.scalar(select(CartItem.id).where(
+        CartItem.cart_id == preflight_cart.id, CartItem.product_id == product_id,
+    ))
+    if preflight_item is None:
+        raise APIError(404, "CART_ITEM_NOT_FOUND", "Товар отсутствует в корзине")
+    products = await _fetch_products(catalog, [product_id])
+    values = _product_values(products[product_id], amount)
+    _check_stock(values, Decimal(0))
+    await db.commit()
+    async with db.begin():
+        cart = await _locked_manual_cart(db, session_id, expected_revision)
+        row = await db.scalar(select(CartItem).where(
+            CartItem.cart_id == cart.id, CartItem.product_id == product_id,
+        ).execution_options(populate_existing=True))
+        if row is None:
+            raise APIError(404, "CART_ITEM_NOT_FOUND", "Товар отсутствует в корзине")
+        if row.unit_price != values["unit_price"]:
+            raise APIError(409, "PRICE_CHANGED", "Цена товара изменилась", {
+                "product_id": product_id, "current_price": money_text(values["unit_price"]),
+            })
+        if row.unit != values["unit"]:
+            raise APIError(409, "PRODUCT_CHANGED", "Единица продажи товара изменилась", {"product_id": product_id})
+        if row.quantity != amount:
+            row.quantity = amount
+            row.name = values["name"]
+            row.price_checked_at = datetime.fromisoformat(values["price_checked_at"].replace("Z", "+00:00"))
+            cart.revision += 1
+            await _replace_pending(db, session_id)
+            await db.flush()
+        return await get_cart_payload(db, session_id)
+
+
 async def create_proposal(db: AsyncSession, session: Session, items: list[dict], catalog) -> dict:
     session_id = session.id
     merged = _merge_items(items)
@@ -257,7 +367,7 @@ async def confirm_proposal(db: AsyncSession, session: Session, proposal_id: uuid
     if preflight is None:
         raise APIError(404, "PROPOSAL_NOT_FOUND", "Предложение не найдено")
     if preflight.status == "confirmed":
-        return preflight.confirmed_result
+        return await _confirmed_result_with_current_cart(db, session_id, preflight)
     if preflight.status == "replaced":
         raise APIError(409, "PROPOSAL_REPLACED", "Предложение заменено")
     if preflight.status != "pending" or preflight.expires_at <= utcnow():
@@ -284,7 +394,7 @@ async def confirm_proposal(db: AsyncSession, session: Session, proposal_id: uuid
         if proposal is None:
             raise APIError(404, "PROPOSAL_NOT_FOUND", "Предложение не найдено")
         if proposal.status == "confirmed":
-            return proposal.confirmed_result
+            return await _confirmed_result_with_current_cart(db, session_id, proposal)
         if proposal.status == "replaced":
             raise APIError(409, "PROPOSAL_REPLACED", "Предложение заменено")
         if proposal.status != "pending" or proposal.expires_at <= utcnow():
@@ -321,6 +431,14 @@ async def confirm_proposal(db: AsyncSession, session: Session, proposal_id: uuid
     return result
 
 
+async def _confirmed_result_with_current_cart(db: AsyncSession, session_id: uuid.UUID, proposal: CartProposal) -> dict:
+    result = dict(proposal.confirmed_result or {})
+    result["proposal"] = _public_proposal(proposal)
+    result["cart"] = await get_cart_payload(db, session_id)
+    result["cart_url"] = "/cart"
+    return result
+
+
 async def cancel_proposal(db: AsyncSession, session: Session, proposal_id: uuid.UUID | str) -> dict:
     session_id = session.id
     try:
@@ -349,6 +467,35 @@ async def cancel_proposal(db: AsyncSession, session: Session, proposal_id: uuid.
 @router.get("")
 async def get_cart(request: Request, session: Session = Depends(require_session), db: AsyncSession = Depends(get_db)) -> dict:
     return await get_cart_payload(db, session)
+
+
+@router.delete("/items/{product_id}")
+async def delete_cart_item(
+    product_id: int, body: ManualMutationIn, request: Request,
+    session: Session = Depends(require_mutation_session), db: AsyncSession = Depends(get_db),
+) -> dict:
+    _require_manual_confirmation(body)
+    return await remove_cart_item(db, session, product_id, body.expected_revision)
+
+
+@router.delete("")
+async def delete_cart(
+    body: ManualMutationIn, request: Request,
+    session: Session = Depends(require_mutation_session), db: AsyncSession = Depends(get_db),
+) -> dict:
+    _require_manual_confirmation(body)
+    return await clear_cart_items(db, session, body.expected_revision)
+
+
+@router.patch("/items/{product_id}")
+async def patch_cart_item(
+    product_id: int, body: SetQuantityIn, request: Request,
+    session: Session = Depends(require_mutation_session), db: AsyncSession = Depends(get_db),
+) -> dict:
+    _require_manual_confirmation(body)
+    return await set_cart_item_quantity(
+        db, session, product_id, body.quantity, body.expected_revision, request.app.state.catalog,
+    )
 
 
 @router.post("/proposals")

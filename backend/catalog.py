@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from sqlalchemy import Numeric, and_, case, cast, func, or_, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import Numeric, and_, case, cast, func, literal, or_, select, true
+from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
 
 from .ekt_client import CatalogNotFound, CatalogUnavailable, EktClient
+from .errors import APIError
 from .models import ProductSnapshot
 
 
@@ -87,6 +88,25 @@ def _filter_values(value: Any) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def _json_array(value: Any) -> Any:
+    """Treat absent, null or malformed JSONB arrays as empty."""
+    return case(
+        (func.jsonb_typeof(value) == "array", value),
+        else_=literal([], type_=JSONB),
+    )
+
+
+def _price_bound(value: Any) -> Decimal:
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise APIError(422, "INVALID_PRICE_RANGE", "Некорректный предел цены") from None
+    if (not amount.is_finite() or amount < 0 or amount.as_tuple().exponent < -2
+            or amount > Decimal("9999999999999999.99")):
+        raise APIError(422, "INVALID_PRICE_RANGE", "Цена должна быть неотрицательной с точностью до 0.01")
+    return amount
+
+
 def _comp(value: Any) -> str:
     """Compare formatting variants such as '16 А' and '16А'."""
     return re.sub(r"\s+", "", str(value or "").casefold()).replace(",", ".")
@@ -127,6 +147,7 @@ def normalize_product(raw: dict[str, Any], checked_at: str | None = None) -> dic
     if unit is None:
         warnings.append("Единица и шаг продажи не проверены; покупка недоступна")
     product_url = _source_url(raw.get("url"))
+    brand = str(props.get("TORGOVAYA_MARKA") or "").strip() or None
     return {
         "id": product_id,
         "article": str(raw.get("article") or props.get("CML2_ARTICLE") or ""),
@@ -134,6 +155,7 @@ def normalize_product(raw: dict[str, Any], checked_at: str | None = None) -> dic
         "name": str(raw.get("name") or ""),
         "category": _category(product_url),
         "series": _series(product_url),
+        "brand": brand,
         "price": price_string,
         "currency": "KZT",
         "available_quantity": str(quantity),
@@ -228,6 +250,7 @@ class CatalogService:
         name = item["name"].astext
         price = cast(item["price"].astext, Numeric(18, 2))
         quantity = cast(item["available_quantity"].astext, Numeric(18, 3))
+        documents = _json_array(item["documents"])
         conditions = []
         if filters.get("category"):
             conditions.append(item["category"].astext == str(filters["category"]))
@@ -236,6 +259,35 @@ class CatalogService:
         series = _filter_values(filters.get("series"))
         if series:
             conditions.append(func.lower(item["series"].astext).in_([v.casefold() for v in series]))
+        brands = _filter_values(filters.get("brand"))
+        if brands:
+            characteristics = func.jsonb_array_elements(_json_array(item["characteristics"])).table_valued("value").lateral("brand_characteristic")
+            code = func.jsonb_extract_path_text(characteristics.c.value, "code")
+            value = func.lower(func.btrim(func.jsonb_extract_path_text(characteristics.c.value, "value")))
+            conditions.append(select(1).select_from(characteristics).where(
+                code == "TORGOVAYA_MARKA", value.in_([brand.casefold() for brand in brands]),
+            ).correlate(ProductSnapshot).exists())
+        if filters.get("has_documents") is not None:
+            count = func.jsonb_array_length(documents)
+            conditions.append(count > 0 if filters["has_documents"] else count == 0)
+        if filters.get("has_certificates") is not None:
+            certificate = documents.contains([{"type": "certificate"}])
+            conditions.append(certificate if filters["has_certificates"] else ~certificate)
+        document_types = _filter_values(filters.get("document_type"))
+        if document_types:
+            conditions.append(or_(*(
+                documents.contains([{"type": document_type}]) for document_type in document_types
+            )))
+        minimum = filters.get("min_price")
+        maximum = filters.get("max_price")
+        minimum = _price_bound(minimum) if minimum is not None else None
+        maximum = _price_bound(maximum) if maximum is not None else None
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise APIError(422, "INVALID_PRICE_RANGE", "Минимальная цена больше максимальной")
+        if minimum is not None:
+            conditions.append(price >= minimum)
+        if maximum is not None:
+            conditions.append(price <= maximum)
         for filter_name, code in (
             ("current", "NOMINALNYY_TOK"),
             ("breaking_capacity", "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST"),
@@ -283,6 +335,42 @@ class CatalogService:
                 .order_by(*ordering).offset(offset).limit(limit)
             )).scalars().all()
         return {"items": rows, "total": total, "catalog_scope": "demo_subset"}
+
+    async def get_filter_facets(self) -> dict[str, Any]:
+        """Return only filter values present in loaded product snapshots."""
+        item = ProductSnapshot.normalized
+        characteristic = func.jsonb_array_elements(_json_array(item["characteristics"])).table_valued("value").lateral("facet_characteristic")
+        characteristic_code = func.jsonb_extract_path_text(characteristic.c.value, "code")
+        characteristic_value = func.btrim(func.jsonb_extract_path_text(characteristic.c.value, "value"))
+        document = func.jsonb_array_elements(_json_array(item["documents"])).table_valued("value").lateral("facet_document")
+        document_type = func.btrim(func.jsonb_extract_path_text(document.c.value, "type"))
+        async with self.session_factory() as session:
+            rows = (await session.execute(select(item["category"].astext, item["series"].astext).distinct())).all()
+            characteristics = (await session.execute(select(
+                characteristic_code, characteristic_value,
+            ).select_from(ProductSnapshot).join(characteristic, true()).where(
+                characteristic_code.in_(["NOMINALNYY_TOK", "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST", "TORGOVAYA_MARKA"]),
+            ).distinct())).all()
+            document_types = (await session.scalars(select(document_type).select_from(ProductSnapshot).join(
+                document, true(),
+            ).where(document_type.is_not(None), document_type != "").distinct())).all()
+        by_code: dict[str, set[str]] = {
+            "NOMINALNYY_TOK": set(),
+            "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST": set(),
+            "TORGOVAYA_MARKA": set(),
+        }
+        for code, value in characteristics:
+            if code in by_code and value:
+                by_code[code].add(value)
+        return {
+            "catalog_scope": "demo_subset",
+            "categories": sorted({category for category, _ in rows if category}),
+            "series": sorted({series for _, series in rows if series}),
+            "current": sorted(by_code["NOMINALNYY_TOK"]),
+            "breaking_capacity": sorted(by_code["NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST"]),
+            "brands": sorted(by_code["TORGOVAYA_MARKA"], key=str.casefold),
+            "document_types": sorted({kind for kind in document_types if kind}),
+        }
 
     async def find_analogs(
         self, product_id: int, required_quantity: Any = None, limit: int = 5,
