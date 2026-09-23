@@ -4,9 +4,9 @@ services:
     environment:
       POSTGRES_DB: hackalem
       POSTGRES_USER: hackalem
-      POSTGRES_PASSWORD: hackalem
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hackalem}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${REDRED_DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -14,6 +14,59 @@ services:
       interval: 3s
       timeout: 3s
       retries: 15
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://hackalem:${POSTGRES_PASSWORD:-hackalem}@db:5432/hackalem
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8083}
+      ADMIN_ORIGIN: ${ADMIN_ORIGIN:-http://localhost:8083}
+      SECURE_COOKIE: ${SECURE_COOKIE:-false}
+      EKT_API_BASE_URL: ${EKT_API_BASE_URL:-https://ekt.kz/api}
+      EKT_API_USERNAME: ${EKT_API_USERNAME:-}
+      EKT_API_PASSWORD: ${EKT_API_PASSWORD:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_FALLBACK_API_KEY: ${OPENAI_FALLBACK_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-sol}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      CATALOG_SYNC_ENABLED: ${CATALOG_SYNC_ENABLED:-true}
+      UPLOAD_DIR: backend/uploads
+    command: ["sh", "-c", "python -m backend.bootstrap && exec python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      - "127.0.0.1:${REDRED_BACKEND_PORT:-8001}:8000"
+    volumes:
+      - uploads:/app/backend/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
+    ports:
+      - "${REDRED_BIND_ADDRESS:-0.0.0.0}:${REDRED_FRONTEND_PORT:-8083}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:
+  uploads:

@@ -40,3 +40,5 @@ venv/
 db.sqlite3
 backend/uploads/
 backend/private_uploads/
+
+release/
