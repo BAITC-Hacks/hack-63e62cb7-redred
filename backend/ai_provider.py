@@ -76,6 +76,11 @@ def from_network(exc: BaseException) -> AIProviderFailure:
 
 
 def user_message(failure: AIProviderFailure, language: str | None) -> str:
+    if failure.code == "timeout":
+        return {
+            "kk": "AI жауапты уақытында дайындап үлгермеді. Сұрауды қайталаңыз. Себет өзгерген жоқ.",
+            "en": "The AI response timed out. Please retry. Your cart was not changed.",
+        }.get(language, "ИИ не успел подготовить ответ за отведённое время. Повторите запрос. Корзина не изменена.")
     configuration = failure.code == "missing_api_key" or failure.code in QUOTA_CODES or failure.status_code in (401, 403)
     if language == "kk":
         return (
