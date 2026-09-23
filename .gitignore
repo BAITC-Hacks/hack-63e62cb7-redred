@@ -11,7 +11,10 @@ Thumbs.db
 
 # Local Markdown and AI agent instructions
 *.md
+!README.md
+!docs/AI_ARCHITECTURE_PLAN.md
 Agents.txt
+.codex/
 
 # Logs and temporary files
 *.log
