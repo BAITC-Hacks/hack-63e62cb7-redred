@@ -39,7 +39,7 @@ function PasswordInput({
         autoComplete={autoComplete}
         className="h-11 pr-11"
         id={id}
-        minLength={8}
+        minLength={autoComplete === "new-password" ? 8 : 1}
         name="password"
         placeholder="Пароль"
         required
@@ -105,13 +105,13 @@ function AuthForm({
         />
       ) : null}
       <Input
-        aria-label="Электронная почта"
-        autoComplete="email"
+        aria-label={mode === "login" ? "Логин или электронная почта" : "Электронная почта"}
+        autoComplete={mode === "login" ? "username" : "email"}
         className="h-11"
         name="email"
-        placeholder="Электронная почта"
+        placeholder={mode === "login" ? "Логин или электронная почта" : "Электронная почта"}
         required
-        type="email"
+        type={mode === "login" ? "text" : "email"}
       />
       <PasswordInput
         autoComplete={mode === "login" ? "current-password" : "new-password"}

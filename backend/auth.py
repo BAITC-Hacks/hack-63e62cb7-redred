@@ -40,10 +40,11 @@ _attempts: dict[str, deque[float]] = defaultdict(deque)
 class Credentials(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=3, max_length=320)
-    password: str = Field(min_length=PASSWORD_MIN, max_length=256)
+    password: str = Field(min_length=1, max_length=256)
 
 
 class Registration(Credentials):
+    password: str = Field(min_length=PASSWORD_MIN, max_length=256)
     name: str | None = Field(default=None, max_length=100)
 
 
@@ -245,7 +246,9 @@ async def login(
     if getattr(session, "_auth_user", None) is not None:
         raise APIError(409, "ALREADY_AUTHENTICATED", "Вы уже вошли в аккаунт")
     _busy(session.id)
-    email = _email(body.email)
+    # Operator-provisioned accounts may use a login instead of an email.
+    # Public registration still requires an email and PASSWORD_MIN characters.
+    email = body.email.strip().casefold()
     _rate_limit(request, email)
     user = await db.scalar(select(User).where(User.email == email))
     valid = await asyncio.to_thread(_verify_password, body.password, user.password_hash if user else None)
