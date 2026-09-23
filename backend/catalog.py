@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from sqlalchemy import select
+from sqlalchemy import Numeric, and_, case, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .ekt_client import CatalogNotFound, CatalogUnavailable, EktClient
 from .models import ProductSnapshot
@@ -59,7 +60,31 @@ def _category(url: str | None) -> str:
         return "Модульные автоматические выключатели"
     if url and "/silovye_avtomaticheskie_vyklyuchateli/" in url:
         return "Силовые автоматические выключатели"
+    if url and "/rozetki_vyklyuchateli_korobki/korobki/" in url:
+        return "Коробки"
+    if url and "/spets_predlozhenie/" in url:
+        return "Спецпредложения"
     return "Каталог ЕКТ"
+
+
+def _series(url: str | None) -> str | None:
+    if url and "/drx125_mt_10_250_a_legrand/" in url:
+        return "DRX125 MT"
+    if url and "/drx250_mt_10_250_a_legrand/" in url:
+        return "DRX250 MT"
+    return None
+
+
+def _like_literal(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _filter_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def _comp(value: Any) -> str:
@@ -96,6 +121,8 @@ def normalize_product(raw: dict[str, Any], checked_at: str | None = None) -> dic
     product_id = int(raw["id"])
     if product_id == 515291:
         warnings.append("В названии указан ток 160 А, в свойстве NOMINALNYY_TOK — 250 А; требуется уточнение")
+    if product_id == 515279:
+        warnings.append("В названии указан ток 40 А, в свойстве NOMINALNYY_TOK — 125 А; требуется уточнение")
     unit, step = ("piece", "1") if product_id in DEMO_IDS else (None, None)
     if unit is None:
         warnings.append("Единица и шаг продажи не проверены; покупка недоступна")
@@ -106,6 +133,7 @@ def normalize_product(raw: dict[str, Any], checked_at: str | None = None) -> dic
         "supplier_article": str(props.get("ARTIKULPOSTAVSHCHIKA") or ""),
         "name": str(raw.get("name") or ""),
         "category": _category(product_url),
+        "series": _series(product_url),
         "price": price_string,
         "currency": "KZT",
         "available_quantity": str(quantity),
@@ -131,17 +159,50 @@ class CatalogService:
         self.session_factory = db_session_factory
         self.ekt = EktClient(http_client, settings)
 
-    async def save_raw(self, raw: dict[str, Any], checked_at: str | None = None) -> dict[str, Any]:
-        product = normalize_product(raw, checked_at)
+    async def save_raw(
+        self, raw: dict[str, Any], checked_at: str | datetime | None = None,
+    ) -> dict[str, Any]:
+        """Keep the newest observation, ordered by request start time in UTC.
+
+        A slow background GET may finish after a newer foreground GET. Its old
+        observation must not overwrite the newer snapshot. `updated_at` carries
+        this observation time; `checked_at` exposes the same time in the card.
+        """
+        if checked_at is None:
+            observed_at = datetime.now(timezone.utc)
+        elif isinstance(checked_at, datetime):
+            observed_at = checked_at
+        else:
+            observed_at = datetime.fromisoformat(checked_at.replace("Z", "+00:00"))
+        if observed_at.tzinfo is None:
+            raise ValueError("checked_at must include a timezone")
+        observed_at = observed_at.astimezone(timezone.utc)
+        checked_at_utc = observed_at.isoformat().replace("+00:00", "Z")
+        product = normalize_product(raw, checked_at_utc)
+        statement = pg_insert(ProductSnapshot).values(
+            id=product["id"], article=product["article"],
+            supplier_article=product["supplier_article"],
+            normalized=product, raw=raw, updated_at=observed_at,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[ProductSnapshot.id],
+            set_={
+                "article": statement.excluded.article,
+                "supplier_article": statement.excluded.supplier_article,
+                "normalized": statement.excluded.normalized,
+                "raw": statement.excluded.raw,
+                "updated_at": statement.excluded.updated_at,
+            },
+            where=ProductSnapshot.updated_at < statement.excluded.updated_at,
+        ).returning(ProductSnapshot.normalized)
         async with self.session_factory() as session:
-            await session.merge(ProductSnapshot(
-                id=product["id"], article=product["article"],
-                supplier_article=product["supplier_article"],
-                normalized=product, raw=raw,
-                updated_at=datetime.now(timezone.utc),
-            ))
+            stored = (await session.execute(statement)).scalar_one_or_none()
+            if stored is None:
+                stored = (await session.execute(
+                    select(ProductSnapshot.normalized).where(ProductSnapshot.id == product["id"])
+                )).scalar_one()
             await session.commit()
-        return product
+        return stored
 
     async def get_product(self, product_id: int, fresh: bool = False) -> dict[str, Any]:
         if not fresh:
@@ -150,10 +211,11 @@ class CatalogService:
                 if snapshot is not None:
                     return snapshot.normalized
         # Every fresh call reaches EKT. Failure cannot fall back to a stale snapshot.
+        observed_at = datetime.now(timezone.utc)
         raw = await self.ekt.detail(int(product_id))
         if int(raw["id"]) != int(product_id):
             raise CatalogUnavailable("ЕКТ вернул карточку другого товара")
-        return await self.save_raw(raw)
+        return await self.save_raw(raw, checked_at=observed_at)
 
     async def search_catalog(
         self, query: str = "", article: str | None = None,
@@ -162,29 +224,65 @@ class CatalogService:
         limit = max(1, min(int(limit), 20))
         offset = max(0, int(offset))
         filters = filters or {}
-        async with self.session_factory() as session:
-            rows = (await session.execute(select(ProductSnapshot))).scalars().all()
+        item = ProductSnapshot.normalized
+        name = item["name"].astext
+        price = cast(item["price"].astext, Numeric(18, 2))
+        quantity = cast(item["available_quantity"].astext, Numeric(18, 3))
+        conditions = []
+        if filters.get("category"):
+            conditions.append(item["category"].astext == str(filters["category"]))
+        if filters.get("available_only") or filters.get("in_stock"):
+            conditions.append(quantity > 0)
+        series = _filter_values(filters.get("series"))
+        if series:
+            conditions.append(func.lower(item["series"].astext).in_([v.casefold() for v in series]))
+        for filter_name, code in (
+            ("current", "NOMINALNYY_TOK"),
+            ("breaking_capacity", "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST"),
+        ):
+            values = _filter_values(filters.get(filter_name))
+            if values:
+                conditions.append(or_(*(
+                    item["characteristics"].contains([{"code": code, "value": value}])
+                    for value in values
+                )))
+        sought_article = str(article or "").strip().casefold()
+        if sought_article:
+            conditions.append(or_(
+                func.lower(ProductSnapshot.article) == sought_article,
+                func.lower(ProductSnapshot.supplier_article) == sought_article,
+            ))
         words = str(query or "").casefold().split()
-        sought_article = str(article or "").casefold().strip()
-        matches = []
-        for row in rows:
-            item = row.normalized
-            if filters.get("category") and item.get("category") != filters["category"]:
-                continue
-            if filters.get("available_only") and (_decimal(item.get("available_quantity")) or Decimal("0")) <= 0:
-                continue
-            a = str(item.get("article") or "").casefold()
-            sa = str(item.get("supplier_article") or "").casefold()
-            name = str(item.get("name") or "").casefold()
-            exact = bool(sought_article and sought_article in (a, sa)) or bool(words and " ".join(words) in (a, sa))
-            if sought_article and not exact:
-                continue
-            if words and not exact and not all(word in name for word in words):
-                continue
-            matches.append((0 if exact else 1, item))
-        matches.sort(key=lambda pair: (pair[0], pair[1].get("name", ""), pair[1]["id"]))
-        return {"items": [item for _, item in matches[offset:offset + limit]],
-                "total": len(matches), "catalog_scope": "demo_subset"}
+        exact = None
+        if words:
+            query_text = " ".join(words)
+            exact = or_(
+                func.lower(ProductSnapshot.article) == query_text,
+                func.lower(ProductSnapshot.supplier_article) == query_text,
+            )
+            word_matches = and_(*(
+                name.ilike(f"%{_like_literal(word)}%", escape="\\") for word in words
+            ))
+            conditions.append(or_(exact, word_matches))
+        sort = filters.get("sort", "relevance")
+        if sort == "price_asc":
+            ordering = (price.asc().nulls_last(), func.lower(name), ProductSnapshot.id)
+        elif sort == "price_desc":
+            ordering = (price.desc().nulls_last(), func.lower(name), ProductSnapshot.id)
+        else:
+            ordering = (
+                *((case((exact, 0), else_=1),) if exact is not None else ()),
+                func.lower(name), ProductSnapshot.id,
+            )
+        async with self.session_factory() as session:
+            total = (await session.execute(
+                select(func.count()).select_from(ProductSnapshot).where(*conditions)
+            )).scalar_one()
+            rows = (await session.execute(
+                select(ProductSnapshot.normalized).where(*conditions)
+                .order_by(*ordering).offset(offset).limit(limit)
+            )).scalars().all()
+        return {"items": rows, "total": total, "catalog_scope": "demo_subset"}
 
     async def find_analogs(
         self, product_id: int, required_quantity: Any = None, limit: int = 5,
@@ -192,7 +290,7 @@ class CatalogService:
         source = await self.get_product(product_id)
         keys = ANALOG_KEYS.get(source["category"])
         source_props = {c["code"]: c["value"] for c in source["characteristics"]}
-        if not keys or source["data_warnings"] and any("ток 160" in w for w in source["data_warnings"]):
+        if not keys or any("NOMINALNYY_TOK" in w for w in source["data_warnings"]):
             return {"source_product_id": product_id, "items": [], "compatibility_note": "Критичные свойства не подтверждены"}
         if any(not source_props.get(key) for key in keys):
             return {"source_product_id": product_id, "items": [], "compatibility_note": "Недостаточно характеристик для подбора"}
@@ -206,7 +304,7 @@ class CatalogService:
                 continue
             if (_decimal(item["available_quantity"]) or Decimal("0")) < needed:
                 continue
-            if any("ток 160" in w for w in item["data_warnings"]):
+            if any("NOMINALNYY_TOK" in w for w in item["data_warnings"]):
                 continue
             props = {c["code"]: c["value"] for c in item["characteristics"]}
             if all(props.get(key) and _comp(props[key]) == _comp(source_props[key]) for key in keys):
