@@ -1,0 +1,136 @@
+{
+  "generated_at": "2026-09-23T09:56:29.787205+00:00",
+  "provider": "openai",
+  "model": "gpt-6-sol",
+  "totals": {
+    "passed": 5,
+    "failed": 0,
+    "duration_ms": 22913,
+    "input_tokens": 5393,
+    "output_tokens": 675
+  },
+  "results": [
+    {
+      "name": "product_conflict_ru",
+      "status": "passed",
+      "duration_ms": 5902,
+      "usage": {
+        "input_tokens": 1290,
+        "output_tokens": 189,
+        "total_tokens": 1479
+      },
+      "tool_names": [
+        "get_product_by_article"
+      ],
+      "final": {
+        "language": "ru",
+        "text": "Артикул 027228 — автоматический выключатель Legrand DRX250. В наличии 23 шт., цена — 64 920 ₸. Характеристики: 3 полюса, номинальное напряжение 400 В. По номинальному току данные расходятся: в названии и описании указано 160 А, в свойствах — 250 А. Перед покупкой этот параметр стоит уточнить. Сертификат не найден.",
+        "product_ids": [
+          515291
+        ],
+        "warnings": [
+          "Противоречивые данные о номинальном токе: 160 А и 250 А.",
+          "Сертификат не найден."
+        ],
+        "pending_action": false,
+        "cart_updated": false,
+        "needs_clarification": false
+      }
+    },
+    {
+      "name": "purchase_terms_kk",
+      "status": "passed",
+      "duration_ms": 6181,
+      "usage": {
+        "input_tokens": 1218,
+        "output_tokens": 204,
+        "total_tokens": 1422
+      },
+      "tool_names": [
+        "get_purchase_terms"
+      ],
+      "final": {
+        "language": "kk",
+        "text": "Жеке тұлғалар картамен онлайн, алған кезде қолма-қол немесе алып кету орнында төлей алады. Жеткізу мерзімі мен құны орналасқан жеріңізге байланысты. Тегін жеткізу шектері туралы жарияланған мәліметтер бір-біріне қайшы келеді, сондықтан нақты шекті растай алмаймын. Дүкен бойынша ең аз тапсырыс мөлшері туралы расталған ереже жоқ.",
+        "product_ids": [],
+        "warnings": [
+          "Тегін жеткізу шектері туралы мәліметтер қайшы.",
+          "Ең аз тапсырыс мөлшері расталмаған."
+        ],
+        "pending_action": false,
+        "cart_updated": false,
+        "needs_clarification": false
+      }
+    },
+    {
+      "name": "analog_en",
+      "status": "passed",
+      "duration_ms": 3675,
+      "usage": {
+        "input_tokens": 1187,
+        "output_tokens": 120,
+        "total_tokens": 1307
+      },
+      "tool_names": [
+        "find_analogs"
+      ],
+      "final": {
+        "language": "en",
+        "text": "Product 9002 is an in-stock analog with 7 available, enough for 2 units. It matches the 3-pole, 160 A and 18 kA specifications. The manufacturer differs, and compatibility needs your verification.",
+        "product_ids": [
+          9002
+        ],
+        "warnings": [
+          "Verify compatibility before ordering."
+        ],
+        "pending_action": false,
+        "cart_updated": false,
+        "needs_clarification": false
+      }
+    },
+    {
+      "name": "yes_without_pending_ru",
+      "status": "passed",
+      "duration_ms": 1933,
+      "usage": {
+        "input_tokens": 524,
+        "output_tokens": 53,
+        "total_tokens": 577
+      },
+      "tool_names": [],
+      "final": {
+        "language": "ru",
+        "text": "Что именно вы хотите подтвердить? У меня нет ожидающего действия.",
+        "product_ids": [],
+        "warnings": [],
+        "pending_action": false,
+        "cart_updated": false,
+        "needs_clarification": true
+      }
+    },
+    {
+      "name": "prepare_cart_ru",
+      "status": "passed",
+      "duration_ms": 5222,
+      "usage": {
+        "input_tokens": 1174,
+        "output_tokens": 109,
+        "total_tokens": 1283
+      },
+      "tool_names": [
+        "prepare_cart_add"
+      ],
+      "final": {
+        "language": "ru",
+        "text": "Подготовлено добавление 2 штук товара в корзину. Корзина пока не изменена — подтвердите действие.",
+        "product_ids": [
+          515291
+        ],
+        "warnings": [],
+        "pending_action": true,
+        "cart_updated": false,
+        "needs_clarification": false
+      }
+    }
+  ]
+}

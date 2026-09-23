@@ -1,0 +1,598 @@
+[
+  {
+    "case": "terms",
+    "status": 200,
+    "duration_seconds": 5.5,
+    "result": {
+      "message_id": "ae70c1b3-a9ab-46fd-8a37-efe130d92bce",
+      "language": "ru",
+      "text": "Для физлиц доступны оплата картой онлайн, наличными при получении, а при самовывозе — наличными или через POS-терминал. Для юрлиц — оплата по счёту или наличными при самовывозе. Срок и стоимость доставки согласуются с менеджером; самовывоз доступен в городах присутствия ЕКТ. Минимальная партия не указана — её нужно уточнить у продавца.",
+      "products": [],
+      "proposal": null,
+      "cart": null,
+      "cart_url": null,
+      "warnings": [
+        "В информации о доставке указаны разные пороги бесплатной доставки: 15 000 ₸ и 30 000 ₸. Уточните действующий порог у продавца.",
+        "Наличие товара на конкретном складе для самовывоза необходимо уточнить."
+      ]
+    },
+    "cart_line_count": 0,
+    "passed": true
+  },
+  {
+    "case": "product",
+    "status": 200,
+    "duration_seconds": 6.593,
+    "result": {
+      "message_id": "595f7ecf-558e-4e1d-81b0-8f570d8d96b7",
+      "language": "ru",
+      "text": "Артикул 010500006_ — автомат IEK ВА47-29, 1 полюс, 16 А, характеристика C, 230 В, отключающая способность 4,5 кА. В наличии 109 741 шт. суммарно по складам. Цена — 768 ₸/шт.; предложение на 2 шт. — 1 536 ₸. [Сертификат](https://ekt.kz/upload/iblock/d73/cg4iz2mfi5d8v86yygje3moxllyoq0w2/Sertifikat-004-MVA20_1_016_C.pdf). Подтвердите предложение на 2 шт.; в корзину товар пока не добавлен.",
+      "products": [
+        {
+          "id": 21449,
+          "article": "010500006_",
+          "supplier_article": "MVA20-1-016-C",
+          "name": "ВА47-29 (1ф) 16А IEK (12/144)",
+          "category": "Модульные автоматические выключатели",
+          "price": "768.00",
+          "currency": "KZT",
+          "available_quantity": "109741",
+          "stock_scope": "all_warehouses",
+          "unit": "piece",
+          "quantity_step": "1",
+          "stores": [
+            {
+              "id": 3,
+              "name": "Шымкент (ул.Байдукова)",
+              "quantity": "13937"
+            },
+            {
+              "id": 7,
+              "name": "Талдыкорган",
+              "quantity": "0"
+            },
+            {
+              "id": 9,
+              "name": "Торговый зал",
+              "quantity": "0"
+            },
+            {
+              "id": 13,
+              "name": "Алматы",
+              "quantity": "42984"
+            },
+            {
+              "id": 18,
+              "name": "Усть-Каменогорск",
+              "quantity": "5376"
+            },
+            {
+              "id": 19,
+              "name": "Тараз",
+              "quantity": "11784"
+            },
+            {
+              "id": 20,
+              "name": "Атырау",
+              "quantity": "5816"
+            },
+            {
+              "id": 21,
+              "name": "Караганда",
+              "quantity": "2419"
+            },
+            {
+              "id": 22,
+              "name": "Новосибирск",
+              "quantity": "0"
+            },
+            {
+              "id": 23,
+              "name": "Актау",
+              "quantity": "4931"
+            },
+            {
+              "id": 24,
+              "name": "Нур-Султан",
+              "quantity": "12769"
+            },
+            {
+              "id": 25,
+              "name": "Шымкент (Тассай)",
+              "quantity": "9725"
+            }
+          ],
+          "description": "Автоматические выключатели ВА47-29 предназначены для защиты распределительных и групповых цепей, имеющих различную нагрузку: – электроприборы, освещение – выключатели с характеристикой В, – двигатели с небольшими пусковыми токами (компрессор, вентилятор) – выключатели с характеристикой C, – двигатели с большими пусковыми токами (подъемные механизмы, насосы) – выключатели с характеристикой D. Автоматические выключатели ВА47-29 рекомендуются к применению в вводно-распределительных устройствах для жилых и общественных зданий.",
+          "characteristics": [
+            {
+              "code": "KOLICHESTVO_POLYUSOV",
+              "name": "Количество полюсов",
+              "value": "1"
+            },
+            {
+              "code": "NOMINALNYY_TOK",
+              "name": "Номинальный ток",
+              "value": "16 А"
+            },
+            {
+              "code": "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST",
+              "name": "Отключающая способность",
+              "value": "4,5кА"
+            },
+            {
+              "code": "NOMINALNOE_NAPRYAZHENIE",
+              "name": "Номинальное напряжение",
+              "value": "230В"
+            },
+            {
+              "code": "KHARAKTERISTIKA_SRABATYVANIYA",
+              "name": "Характеристика срабатывания",
+              "value": "C"
+            },
+            {
+              "code": "TORGOVAYA_MARKA",
+              "name": "Торговая марка",
+              "value": "IEK"
+            }
+          ],
+          "documents": [
+            {
+              "type": "refusal_letter",
+              "title": "Отказное письмо 043 MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/d16/mfgpxsn36rskuho1o23tolrgvu0852ew/Otkaznoe-pismo-043-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "refusal_letter",
+              "title": "Отказное письмо 123 FZ MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/d6c/nyypp4htt4yz5dk7y6vfsjo30whxvmjj/Otkaznoe-pismo-123_FZ-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "declaration",
+              "title": "Декларация 037 MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/6c6/olvnj39a03ztrg0jmvmto1gpd6po3r9h/Deklaratsiya-037-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "certificate",
+              "title": "Сертификат 004 MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/d73/cg4iz2mfi5d8v86yygje3moxllyoq0w2/Sertifikat-004-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "instruction",
+              "title": "Инструкция по таблицам селективности MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/534/1aqkne81bcs2bezovzrmtko3b70hkzf0/Instruktsiya-po-ispolzovaniyu-tablits-selektivnosti-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "manual",
+              "title": "Краткое руководство MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/51a/u22znzyo3d3n95rtpt7eoqrwmveclc3w/Kratkoe-rukovodstvo-po-ekspluatatsii-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            }
+          ],
+          "product_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/",
+          "image_url": "https://ekt.kz/upload/iblock/407/0531p7w0ivbd6celf8sl11jfqu43zymt/va47_29_1f_16a_iek_12_144_.jpg",
+          "data_warnings": [],
+          "checked_at": "2026-09-23T10:37:45.656820Z"
+        }
+      ],
+      "proposal": {
+        "id": "c54f51ee-3ce5-48d8-bafd-5e73b611f25d",
+        "status": "pending",
+        "expires_at": "2026-09-23T10:47:49.619354+00:00",
+        "items": [
+          {
+            "product_id": 21449,
+            "name": "ВА47-29 (1ф) 16А IEK (12/144)",
+            "quantity": "2",
+            "unit": "piece",
+            "unit_price": "768.00",
+            "line_total": "1536.00"
+          }
+        ],
+        "total": "1536.00",
+        "currency": "KZT"
+      },
+      "cart": null,
+      "cart_url": null,
+      "warnings": []
+    },
+    "cart_line_count": 0,
+    "passed": true
+  },
+  {
+    "case": "confirm",
+    "status": 200,
+    "duration_seconds": 0.235,
+    "result": {
+      "message_id": "5878b61d-de77-4fda-a0dc-0450f680831c",
+      "language": "ru",
+      "text": "Товары добавлены в корзину.",
+      "products": [],
+      "proposal": {
+        "id": "c54f51ee-3ce5-48d8-bafd-5e73b611f25d",
+        "status": "confirmed",
+        "expires_at": "2026-09-23T10:47:49.619354+00:00",
+        "items": [
+          {
+            "product_id": 21449,
+            "name": "ВА47-29 (1ф) 16А IEK (12/144)",
+            "quantity": "2",
+            "unit": "piece",
+            "unit_price": "768.00",
+            "line_total": "1536.00"
+          }
+        ],
+        "total": "1536.00",
+        "currency": "KZT"
+      },
+      "cart": {
+        "id": "dff9c464-ee53-490a-84d3-141457d39c86",
+        "revision": 1,
+        "items": [
+          {
+            "product_id": 21449,
+            "name": "ВА47-29 (1ф) 16А IEK (12/144)",
+            "quantity": "2",
+            "unit": "piece",
+            "unit_price": "768.00",
+            "line_total": "1536.00",
+            "price_checked_at": "2026-09-23T10:37:49.808409+00:00"
+          }
+        ],
+        "line_count": 1,
+        "total": "1536.00",
+        "currency": "KZT",
+        "cart_url": "/cart"
+      },
+      "cart_url": "/cart",
+      "warnings": []
+    },
+    "cart_line_count": 1,
+    "passed": true
+  },
+  {
+    "case": "analogs",
+    "status": 200,
+    "duration_seconds": 7.266,
+    "result": {
+      "message_id": "a3439232-b1ea-43d9-b883-258885fd3463",
+      "language": "ru",
+      "text": "Артикул 010500139_ есть в каталоге, но сейчас его нет в наличии: 0 шт. суммарно по складам. Аналог — 010500006_ IEK, в наличии 109 741 шт. У обоих автоматов совпадают указанные характеристики: 1 полюс, 16 А, характеристика C, 230 В и отключающая способность 4,5 кА. Отличается марка: исходный — GENERICA, аналог — IEK; цена аналога — 768 ₸/шт. Окончательную пригодность для вашей цепи нужно проверить. Аналог уже есть в вашей корзине (2 шт.); новых изменений я не вносил.",
+      "products": [
+        {
+          "id": 19457,
+          "article": "010500139_",
+          "supplier_article": "MVA25-1-016-C",
+          "name": "ВА47-29 (1ф) 16А GENERICA (12/144) !!!",
+          "category": "Модульные автоматические выключатели",
+          "price": "394.00",
+          "currency": "KZT",
+          "available_quantity": "0",
+          "stock_scope": "all_warehouses",
+          "unit": "piece",
+          "quantity_step": "1",
+          "stores": [
+            {
+              "id": 2,
+              "name": "Брак MEGALIGHT",
+              "quantity": "0"
+            },
+            {
+              "id": 3,
+              "name": "Шымкент (ул.Байдукова)",
+              "quantity": "0"
+            },
+            {
+              "id": 4,
+              "name": "Маркетинг MEGALIGHT",
+              "quantity": "0"
+            },
+            {
+              "id": 5,
+              "name": "Никонов",
+              "quantity": "0"
+            },
+            {
+              "id": 6,
+              "name": "РЦ MEGALIGHT",
+              "quantity": "0"
+            },
+            {
+              "id": 7,
+              "name": "Талдыкорган",
+              "quantity": "0"
+            },
+            {
+              "id": 8,
+              "name": "Тастак",
+              "quantity": "0"
+            },
+            {
+              "id": 9,
+              "name": "Торговый зал",
+              "quantity": "0"
+            },
+            {
+              "id": 10,
+              "name": "Востановленный продукт",
+              "quantity": "0"
+            },
+            {
+              "id": 11,
+              "name": "перемещение",
+              "quantity": "0"
+            },
+            {
+              "id": 12,
+              "name": "Основной склад",
+              "quantity": "0"
+            },
+            {
+              "id": 13,
+              "name": "Алматы",
+              "quantity": "0"
+            },
+            {
+              "id": 14,
+              "name": "ЩИТОВОЕ",
+              "quantity": "0"
+            },
+            {
+              "id": 15,
+              "name": "РЦ UNIT",
+              "quantity": "0"
+            },
+            {
+              "id": 16,
+              "name": "Образцы Отдел Закупа",
+              "quantity": "0"
+            },
+            {
+              "id": 17,
+              "name": "Витрина ТЗ",
+              "quantity": "0"
+            },
+            {
+              "id": 18,
+              "name": "Усть-Каменогорск",
+              "quantity": "0"
+            },
+            {
+              "id": 19,
+              "name": "Тараз",
+              "quantity": "0"
+            },
+            {
+              "id": 20,
+              "name": "Атырау",
+              "quantity": "0"
+            },
+            {
+              "id": 21,
+              "name": "Караганда",
+              "quantity": "0"
+            },
+            {
+              "id": 22,
+              "name": "Новосибирск",
+              "quantity": "0"
+            },
+            {
+              "id": 23,
+              "name": "Актау",
+              "quantity": "0"
+            },
+            {
+              "id": 24,
+              "name": "Нур-Султан",
+              "quantity": "0"
+            },
+            {
+              "id": 25,
+              "name": "Шымкент (Тассай)",
+              "quantity": "0"
+            }
+          ],
+          "description": "Выключатель автоматический ВА47-29 Generica – модульный  коммутационный контактный аппарат служит для коммутации тока, способен отключать токи при ненормальных условиях цепи, таких как короткое замыкание тока и превышение нагрузки на цепь. Имеет усовершенствованную дугогасительную систему и тепловой  расцепитель. Работает при номинальном напряжении частотой 50 Гц, имеет широкий диапазон температур от -40 °C до +50 ° C.",
+          "characteristics": [
+            {
+              "code": "KOLICHESTVO_POLYUSOV",
+              "name": "Количество полюсов",
+              "value": "1"
+            },
+            {
+              "code": "NOMINALNYY_TOK",
+              "name": "Номинальный ток",
+              "value": "16 А"
+            },
+            {
+              "code": "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST",
+              "name": "Отключающая способность",
+              "value": "4,5кА"
+            },
+            {
+              "code": "NOMINALNOE_NAPRYAZHENIE",
+              "name": "Номинальное напряжение",
+              "value": "230В"
+            },
+            {
+              "code": "KHARAKTERISTIKA_SRABATYVANIYA",
+              "name": "Характеристика срабатывания",
+              "value": "C"
+            },
+            {
+              "code": "TORGOVAYA_MARKA",
+              "name": "Торговая марка",
+              "value": "GENERICA"
+            }
+          ],
+          "documents": [],
+          "product_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_generica/va47_29_1f_16a_generica_12_144_/",
+          "image_url": "https://ekt.kz/upload/iblock/d19/ffh924r6tnk1wrsgfsz4tp48p1deerbs/va47_29_1f_16a_generica_12_144_.jpg",
+          "data_warnings": [],
+          "checked_at": "2026-09-23T10:37:52.167053Z"
+        },
+        {
+          "id": 21449,
+          "article": "010500006_",
+          "supplier_article": "MVA20-1-016-C",
+          "name": "ВА47-29 (1ф) 16А IEK (12/144)",
+          "category": "Модульные автоматические выключатели",
+          "price": "768.00",
+          "currency": "KZT",
+          "available_quantity": "109741",
+          "stock_scope": "all_warehouses",
+          "unit": "piece",
+          "quantity_step": "1",
+          "stores": [
+            {
+              "id": 3,
+              "name": "Шымкент (ул.Байдукова)",
+              "quantity": "13937"
+            },
+            {
+              "id": 7,
+              "name": "Талдыкорган",
+              "quantity": "0"
+            },
+            {
+              "id": 9,
+              "name": "Торговый зал",
+              "quantity": "0"
+            },
+            {
+              "id": 13,
+              "name": "Алматы",
+              "quantity": "42984"
+            },
+            {
+              "id": 18,
+              "name": "Усть-Каменогорск",
+              "quantity": "5376"
+            },
+            {
+              "id": 19,
+              "name": "Тараз",
+              "quantity": "11784"
+            },
+            {
+              "id": 20,
+              "name": "Атырау",
+              "quantity": "5816"
+            },
+            {
+              "id": 21,
+              "name": "Караганда",
+              "quantity": "2419"
+            },
+            {
+              "id": 22,
+              "name": "Новосибирск",
+              "quantity": "0"
+            },
+            {
+              "id": 23,
+              "name": "Актау",
+              "quantity": "4931"
+            },
+            {
+              "id": 24,
+              "name": "Нур-Султан",
+              "quantity": "12769"
+            },
+            {
+              "id": 25,
+              "name": "Шымкент (Тассай)",
+              "quantity": "9725"
+            }
+          ],
+          "description": "Автоматические выключатели ВА47-29 предназначены для защиты распределительных и групповых цепей, имеющих различную нагрузку: – электроприборы, освещение – выключатели с характеристикой В, – двигатели с небольшими пусковыми токами (компрессор, вентилятор) – выключатели с характеристикой C, – двигатели с большими пусковыми токами (подъемные механизмы, насосы) – выключатели с характеристикой D. Автоматические выключатели ВА47-29 рекомендуются к применению в вводно-распределительных устройствах для жилых и общественных зданий.",
+          "characteristics": [
+            {
+              "code": "KOLICHESTVO_POLYUSOV",
+              "name": "Количество полюсов",
+              "value": "1"
+            },
+            {
+              "code": "NOMINALNYY_TOK",
+              "name": "Номинальный ток",
+              "value": "16 А"
+            },
+            {
+              "code": "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST",
+              "name": "Отключающая способность",
+              "value": "4,5кА"
+            },
+            {
+              "code": "NOMINALNOE_NAPRYAZHENIE",
+              "name": "Номинальное напряжение",
+              "value": "230В"
+            },
+            {
+              "code": "KHARAKTERISTIKA_SRABATYVANIYA",
+              "name": "Характеристика срабатывания",
+              "value": "C"
+            },
+            {
+              "code": "TORGOVAYA_MARKA",
+              "name": "Торговая марка",
+              "value": "IEK"
+            }
+          ],
+          "documents": [
+            {
+              "type": "refusal_letter",
+              "title": "Отказное письмо 043 MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/d16/mfgpxsn36rskuho1o23tolrgvu0852ew/Otkaznoe-pismo-043-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "refusal_letter",
+              "title": "Отказное письмо 123 FZ MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/d6c/nyypp4htt4yz5dk7y6vfsjo30whxvmjj/Otkaznoe-pismo-123_FZ-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "declaration",
+              "title": "Декларация 037 MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/6c6/olvnj39a03ztrg0jmvmto1gpd6po3r9h/Deklaratsiya-037-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "certificate",
+              "title": "Сертификат 004 MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/d73/cg4iz2mfi5d8v86yygje3moxllyoq0w2/Sertifikat-004-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "instruction",
+              "title": "Инструкция по таблицам селективности MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/534/1aqkne81bcs2bezovzrmtko3b70hkzf0/Instruktsiya-po-ispolzovaniyu-tablits-selektivnosti-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            },
+            {
+              "type": "manual",
+              "title": "Краткое руководство MVA20-1-016-C",
+              "url": "https://ekt.kz/upload/iblock/51a/u22znzyo3d3n95rtpt7eoqrwmveclc3w/Kratkoe-rukovodstvo-po-ekspluatatsii-MVA20_1_016_C.pdf",
+              "source_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/"
+            }
+          ],
+          "product_url": "https://ekt.kz/catalog/nizkovoltnaya_apparatura/modulnye_avtomaticheskie_vyklyuchateli/va_47_29_3_63_a_iek/va47_29_1f_16a_iek_12_144_/",
+          "image_url": "https://ekt.kz/upload/iblock/407/0531p7w0ivbd6celf8sl11jfqu43zymt/va47_29_1f_16a_iek_12_144_.jpg",
+          "data_warnings": [],
+          "checked_at": "2026-09-23T10:37:52.276043Z"
+        }
+      ],
+      "proposal": null,
+      "cart": null,
+      "cart_url": null,
+      "warnings": []
+    },
+    "cart_line_count": 1,
+    "passed": true
+  }
+]

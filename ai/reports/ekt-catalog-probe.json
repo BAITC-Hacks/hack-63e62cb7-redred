@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-09-23T09:57:27.633387+00:00",
+  "status": "partial",
+  "limits": {
+    "pages": 1,
+    "details": 6
+  },
+  "summary": {
+    "list_pages_checked": 0,
+    "list_items_seen": 0,
+    "details_checked": 0,
+    "zero_stock_found": 0,
+    "recommendations_found": 0,
+    "certificate_fields_found": 0,
+    "amp_conflicts_found": 0,
+    "average_detail_latency_ms": null
+  },
+  "pages": [],
+  "products": [],
+  "errors": [
+    "Network error for products after 2 attempts: The read operation timed out",
+    "detail 515291: Network error for products/detail after 2 attempts: The read operation timed out"
+  ]
+}
