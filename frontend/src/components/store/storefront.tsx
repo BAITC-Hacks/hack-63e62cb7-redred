@@ -8,6 +8,9 @@ import {
 } from "react"
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
   FileText,
   Menu,
   Minus,
@@ -16,6 +19,7 @@ import {
   Search,
   ShoppingCart,
   SlidersHorizontal,
+  Trash2,
   UserRound,
 } from "lucide-react"
 
@@ -34,14 +38,20 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   getCart,
   getProduct,
+  getProductFacets,
   prepareCartProposal,
+  removeCartItem,
   resolveProposal,
   searchProducts,
+  type CatalogFilters,
+  type CatalogFacets,
   type CartProposal,
   type ChatApiError,
   type Cart,
@@ -52,6 +62,7 @@ import {
   demoEnabled,
   prepareDemoProposal,
   readDemoCart,
+  removeDemoCartItem,
   resolveDemoProposal,
 } from "@/lib/demo-data"
 
@@ -69,16 +80,61 @@ type CartAction = {
 
 type Filters = {
   available: boolean
+  hasDocuments: boolean | null
+  hasCertificates: boolean | null
   series: string[]
-  currents: number[]
-  capacities: number[]
+  currents: string[]
+  capacities: string[]
 }
 
 const emptyFilters: Filters = {
   available: false,
+  hasDocuments: null,
+  hasCertificates: null,
   series: [],
   currents: [],
   capacities: [],
+}
+
+const presenceOptions = [
+  { value: null, label: "Все" },
+  { value: true, label: "Есть" },
+  { value: false, label: "Нет" },
+] as const
+
+const numericOptions = (values: string[]) =>
+  [...new Set(values)].sort(
+    (a, b) =>
+      Number.parseFloat(a.replace(",", ".")) -
+      Number.parseFloat(b.replace(",", "."))
+  )
+
+const demoFacets: CatalogFacets = {
+  categories: [...new Set(demoCatalog.map((product) => product.category).filter((value): value is string => Boolean(value)))],
+  series: [...new Set(demoCatalog.map((product) => product.series))],
+  current: numericOptions(demoCatalog.map((product) => `${product.current} А`)),
+  breaking_capacity: numericOptions(
+    demoCatalog.map((product) => `${product.breakingCapacity} кА`)
+  ),
+}
+
+const catalogPageSize = 20
+
+function paginationItems(page: number, pageCount: number) {
+  const pages = [...new Set([1, page - 1, page, page + 1, pageCount])]
+    .filter((value) => value >= 1 && value <= pageCount)
+    .sort((a, b) => a - b)
+  const items: Array<number | "…"> = []
+  for (const value of pages) {
+    const previous = items.at(-1)
+    if (typeof previous === "number" && value - previous === 2) {
+      items.push(previous + 1)
+    } else if (typeof previous === "number" && value - previous > 2) {
+      items.push("…")
+    }
+    items.push(value)
+  }
+  return items
 }
 
 const currency = new Intl.NumberFormat("ru-KZ", {
@@ -89,6 +145,15 @@ const currency = new Intl.NumberFormat("ru-KZ", {
 
 function formatPrice(value: string | null | undefined) {
   return value == null ? "Цена по запросу" : currency.format(Number(value))
+}
+
+function documentHref(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" ? url.href : null
+  } catch {
+    return null
+  }
 }
 
 function productCount(count: number) {
@@ -209,6 +274,8 @@ function ProductImage({
           className={`absolute inset-0 size-full object-contain transition-transform duration-200 group-hover:scale-[1.04] ${detail ? "p-8" : "p-2 md:p-3"}`}
           src={product.image_url}
           alt=""
+          decoding="async"
+          loading={detail ? "eager" : "lazy"}
         />
       ) : (
         <Package className="absolute top-1/2 left-1/2 size-12 -translate-x-1/2 -translate-y-1/2 text-zinc-200" />
@@ -294,6 +361,7 @@ function FilterButton({
 }) {
   return (
     <Button
+      aria-pressed={active}
       className={
         active
           ? "border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-800"
@@ -312,9 +380,11 @@ function FilterButton({
 
 function FilterDialog({
   filters,
+  facets,
   onChange,
 }: {
   filters: Filters
+  facets: CatalogFacets
   onChange: (filters: Filters) => void
 }) {
   const [draft, setDraft] = useState(filters)
@@ -324,7 +394,7 @@ function FilterDialog({
       : [...values, value]
 
   return (
-    <Dialog>
+    <Dialog onOpenChange={(open) => open && setDraft(filters)}>
       <DialogTrigger asChild>
         <Button className="h-9 cursor-pointer" variant="outline">
           <SlidersHorizontal className="size-4" />
@@ -334,6 +404,9 @@ function FilterDialog({
       <DialogContent className="max-h-[calc(100dvh-24px)] overflow-y-auto sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Фильтры</DialogTitle>
+          <DialogDescription className="sr-only">
+            Выберите параметры каталога и покажите подходящие товары.
+          </DialogDescription>
         </DialogHeader>
         <label className="flex h-14 cursor-pointer items-center justify-between rounded-xl border px-4 text-sm font-medium">
           Только в наличии
@@ -345,9 +418,52 @@ function FilterDialog({
           />
         </label>
         <div className="space-y-3">
+          <p className="text-sm font-semibold">Документы</p>
+          <div aria-label="Документы" className="flex flex-wrap gap-2" role="group">
+            {presenceOptions.map(({ value, label }) => (
+              <FilterButton
+                active={draft.hasDocuments === value}
+                key={label}
+                onClick={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    hasDocuments: value,
+                    hasCertificates: value === false ? null : current.hasCertificates,
+                  }))
+                }
+              >
+                {label}
+              </FilterButton>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold">Сертификат</p>
+          <div aria-label="Сертификат" className="flex flex-wrap gap-2" role="group">
+            {presenceOptions.map(({ value, label }) => (
+              <FilterButton
+                active={draft.hasCertificates === value}
+                key={label}
+                onClick={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    hasDocuments:
+                      value === true && current.hasDocuments === false
+                        ? null
+                        : current.hasDocuments,
+                    hasCertificates: value,
+                  }))
+                }
+              >
+                {label}
+              </FilterButton>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-3">
           <p className="text-sm font-semibold">Серия</p>
           <div className="flex flex-wrap gap-2">
-            {["DRX125 MT", "DRX250 MT"].map((value) => (
+            {facets.series.map((value) => (
               <FilterButton
                 active={draft.series.includes(value)}
                 key={value}
@@ -366,7 +482,7 @@ function FilterDialog({
         <div className="space-y-3">
           <p className="text-sm font-semibold">Номинальный ток</p>
           <div className="flex flex-wrap gap-2">
-            {[25, 40, 50, 63, 100, 125, 160, 200, 250].map((value) => (
+            {numericOptions(facets.current).map((value) => (
               <FilterButton
                 active={draft.currents.includes(value)}
                 key={value}
@@ -377,7 +493,7 @@ function FilterDialog({
                   }))
                 }
               >
-                {value} А
+                {value}
               </FilterButton>
             ))}
           </div>
@@ -385,7 +501,7 @@ function FilterDialog({
         <div className="space-y-3">
           <p className="text-sm font-semibold">Отключающая способность</p>
           <div className="flex flex-wrap gap-2">
-            {[10, 18, 20, 25].map((value) => (
+            {numericOptions(facets.breaking_capacity).map((value) => (
               <FilterButton
                 active={draft.capacities.includes(value)}
                 key={value}
@@ -396,7 +512,7 @@ function FilterDialog({
                   }))
                 }
               >
-                {value} кА
+                {value}
               </FilterButton>
             ))}
           </div>
@@ -433,57 +549,100 @@ function CatalogPage({
 }) {
   const [products, setProducts] = useState<Product[]>([])
   const [filters, setFilters] = useState(emptyFilters)
+  const [facets, setFacets] = useState<CatalogFacets>(demoFacets)
   const [sort, setSort] = useState("popular")
-  const [category, setCategory] = useState("breakers")
+  const [category, setCategory] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [demoMode, setDemoMode] = useState(false)
   const [catalogError, setCatalogError] = useState(false)
+  const catalogRef = useRef<HTMLDivElement>(null)
+  const pageCount = Math.ceil(total / catalogPageSize)
+
+  const catalogFilters = useMemo<CatalogFilters>(() => ({
+    category,
+    inStock: filters.available,
+    series: filters.series,
+    current: filters.currents,
+    breakingCapacity: filters.capacities,
+    hasDocuments: filters.hasDocuments,
+    hasCertificates: filters.hasCertificates,
+    sort: sort === "price-asc" ? "price_asc" : sort === "price-desc" ? "price_desc" : "relevance",
+  }), [category, filters, sort])
 
   useEffect(() => {
     let active = true
-    searchProducts(query)
+    getProductFacets()
+      .then((value) => active && setFacets(value))
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    searchProducts(query, catalogFilters, (page - 1) * catalogPageSize)
       .then((response) => {
         if (!active) return
         setDemoMode(response.catalog_scope === "demo_subset")
         setCatalogError(false)
         setProducts(response.items)
+        setTotal(response.total)
       })
       .catch(() => {
         if (!active) return
         setDemoMode(demoEnabled)
         setCatalogError(!demoEnabled)
-        setProducts(demoEnabled ? demoCatalog : [])
+        setProducts(demoEnabled ? demoCatalog.slice((page - 1) * catalogPageSize, page * catalogPageSize) : [])
+        setTotal(demoEnabled ? demoCatalog.length : 0)
       })
       .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
-  }, [query])
+  }, [query, catalogFilters, page])
+
+  function changePage(nextPage: number) {
+    if (nextPage === page || nextPage < 1 || nextPage > pageCount) return
+    setLoading(true)
+    setPage(nextPage)
+    catalogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   const visible = useMemo(() => {
     const normalized = query.toLocaleLowerCase("ru")
     const values = products.filter((product) => {
-      const demo = demoCatalog.find(
-        (item) =>
-          item.id === product.id ||
-          item.supplier_article === product.supplier_article
+      const characteristic = (...codes: string[]) =>
+        product.characteristics?.find((item) => codes.includes(item.code))?.value
+      const series = product.series ?? characteristic("SERIES")
+      const current = characteristic("NOMINALNYY_TOK", "CURRENT")
+      const capacity = characteristic(
+        "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST",
+        "BREAKING_CAPACITY"
       )
       const matchesQuery =
         !normalized ||
         `${product.name} ${product.article} ${product.supplier_article}`
           .toLocaleLowerCase("ru")
           .includes(normalized)
+      const hasDocuments = Boolean(product.documents?.length)
+      const hasCertificate =
+        product.documents?.some((document) => document.type === "certificate") ??
+        false
       return (
         matchesQuery &&
-        (category === "all" ||
-          product.category?.toLocaleLowerCase("ru").includes("выключател")) &&
+        (!category || product.category === category) &&
         (!filters.available || Number(product.available_quantity) > 0) &&
-        (!filters.series.length ||
-          (demo && filters.series.includes(demo.series))) &&
-        (!filters.currents.length ||
-          (demo && filters.currents.includes(demo.current))) &&
+        (filters.hasDocuments === null ||
+          filters.hasDocuments === hasDocuments) &&
+        (filters.hasCertificates === null ||
+          filters.hasCertificates === hasCertificate) &&
+        (!filters.series.length || (series && filters.series.includes(series))) &&
+        (!filters.currents.length || (current && filters.currents.includes(current))) &&
         (!filters.capacities.length ||
-          (demo && filters.capacities.includes(demo.breakingCapacity)))
+          (capacity && filters.capacities.includes(capacity)))
       )
     })
     return [...values].sort((a, b) =>
@@ -495,46 +654,60 @@ function CatalogPage({
     )
   }, [category, filters, products, query, sort])
 
-  const categoryName =
-    category === "all" ? "Все товары" : "Автоматические выключатели"
-
   return (
-    <div className="px-4 py-6 md:px-10 md:py-7">
+    <div className="px-4 py-6 md:px-10 md:py-7" ref={catalogRef}>
       <p className="text-xs text-muted-foreground">
-        Каталог / {categoryName}
+        Каталог / Товары ЕКТ
       </p>
       <div className="mt-2 flex items-baseline gap-3">
         <h1 className="text-[26px] leading-8 font-bold">
-          {categoryName}
+          Каталог товаров
         </h1>
         <span className="text-xs text-muted-foreground">
-          {productCount(visible.length)}
+          {loading ? "Ищем товары…" : productCount(total)}
         </span>
-        {demoMode ? <Badge variant="secondary">Демо</Badge> : null}
+        {demoMode ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge className="cursor-help" tabIndex={0} variant="secondary">
+                Тестовая выборка ЕКТ
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              Источник данных: https://ekt.kz/api
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
         {catalogError ? <p role="alert">Каталог временно недоступен. Повторите поиск позже.</p> : null}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-3">
-        <div aria-label="Категория" className="flex items-center gap-1.5" role="group">
-          <Button
-            aria-pressed={category === "breakers"}
-            className={category === "breakers" ? "h-9 cursor-pointer bg-zinc-950 px-3 hover:bg-zinc-800" : "h-9 cursor-pointer px-3"}
-            onClick={() => setCategory("breakers")}
-            size="sm"
-            variant={category === "breakers" ? "default" : "outline"}
-          >
-            Автоматы
-          </Button>
-          <Button
-            aria-pressed={category === "all"}
-            className={category === "all" ? "h-9 cursor-pointer bg-zinc-950 px-3 hover:bg-zinc-800" : "h-9 cursor-pointer px-3"}
-            onClick={() => setCategory("all")}
-            size="sm"
-            variant={category === "all" ? "default" : "outline"}
-          >
-            Все товары
-          </Button>
-        </div>
-        <FilterDialog filters={filters} onChange={setFilters} />
+        <Select
+          onValueChange={(value) => {
+            setLoading(true)
+            setCategory(value === "all" ? null : value)
+            setPage(1)
+          }}
+          value={category ?? "all"}
+        >
+          <SelectTrigger aria-label="Категория" className="h-9 w-[220px] max-w-full cursor-pointer">
+            <SelectValue placeholder="Все категории" />
+          </SelectTrigger>
+          <SelectContent align="start" position="popper">
+            <SelectItem value="all">Все категории</SelectItem>
+            {facets.categories.map((value) => (
+              <SelectItem key={value} value={value}>{value}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FilterDialog
+          facets={facets}
+          filters={filters}
+          onChange={(next) => {
+            setLoading(true)
+            setFilters(next)
+            setPage(1)
+          }}
+        />
         <div aria-label="Сортировка" className="flex w-fit max-w-full items-center gap-0.5 rounded-lg border bg-zinc-50 p-0.5 md:ml-auto" role="group">
           {[
             ["popular", "Популярные"],
@@ -545,7 +718,11 @@ function CatalogPage({
               aria-pressed={sort === value}
               className={sort === value ? "h-8 cursor-pointer bg-white px-2.5 text-zinc-950 shadow-sm hover:bg-white" : "h-8 cursor-pointer px-2.5 text-muted-foreground hover:bg-white/70"}
               key={value}
-              onClick={() => setSort(value)}
+              onClick={() => {
+                setLoading(true)
+                setSort(value)
+                setPage(1)
+              }}
               size="sm"
               variant="ghost"
             >
@@ -583,6 +760,8 @@ function CatalogPage({
                   new CustomEvent("catalog-search", { detail: "" })
                 )
                 setFilters(emptyFilters)
+                setLoading(true)
+                setPage(1)
               }}
               variant="outline"
             >
@@ -591,11 +770,44 @@ function CatalogPage({
           </div>
         </div>
       )}
+      {!loading && pageCount > 1 ? (
+        <nav aria-label="Страницы каталога" className="mt-7 flex flex-wrap items-center justify-center gap-1.5">
+          <Button aria-label="Предыдущая страница" className="size-9" disabled={page === 1} onClick={() => changePage(page - 1)} size="icon" variant="outline">
+            <ChevronLeft className="size-4" />
+          </Button>
+          {paginationItems(page, pageCount).map((item, index) =>
+            item === "…" ? (
+              <span aria-hidden="true" className="px-1 text-muted-foreground" key={`gap-${index}`}>…</span>
+            ) : (
+              <Button
+                aria-current={item === page ? "page" : undefined}
+                aria-label={`Страница ${item}`}
+                className="size-9 cursor-pointer"
+                key={item}
+                onClick={() => changePage(item)}
+                size="icon"
+                variant={item === page ? "default" : "outline"}
+              >
+                {item}
+              </Button>
+            )
+          )}
+          <Button aria-label="Следующая страница" className="size-9" disabled={page === pageCount} onClick={() => changePage(page + 1)} size="icon" variant="outline">
+            <ChevronRight className="size-4" />
+          </Button>
+        </nav>
+      ) : null}
     </div>
   )
 }
 
-function Breadcrumbs({ onBack }: { onBack: () => void }) {
+function Breadcrumbs({
+  category,
+  onBack,
+}: {
+  category?: string | null
+  onBack: () => void
+}) {
   return (
     <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
       <Button className="h-auto p-0 text-xs text-muted-foreground hover:bg-transparent hover:underline" onClick={onBack} type="button" variant="ghost">
@@ -603,7 +815,7 @@ function Breadcrumbs({ onBack }: { onBack: () => void }) {
       </Button>
       <span>/</span>
       <Button className="h-auto p-0 text-xs text-muted-foreground hover:bg-transparent hover:underline" onClick={onBack} type="button" variant="ghost">
-        Автоматические выключатели
+        {category ?? "Все товары"}
       </Button>
     </div>
   )
@@ -620,27 +832,29 @@ function ProductPage({
 }) {
   const [product, setProduct] = useState(initialProduct)
   const [quantity, setQuantity] = useState(1)
+  const [freshUnavailable, setFreshUnavailable] = useState(false)
   useEffect(() => {
     let active = true
     getProduct(initialProduct.id)
       .then((value) => active && setProduct(value))
-      .catch(() => undefined)
+      .catch(() => active && setFreshUnavailable(true))
     return () => {
       active = false
     }
   }, [initialProduct])
   const available = Number(product.available_quantity) > 0
+  const brand =
+    product.brand ??
+    product.characteristics?.find((item) => item.code === "TORGOVAYA_MARKA")
+      ?.value
 
   return (
     <div className="px-4 py-6 md:px-10">
-      <Breadcrumbs onBack={onBack} />
+      <Breadcrumbs category={product.category} onBack={onBack} />
       <div className="grid gap-6 md:grid-cols-[minmax(300px,40%)_1fr] md:gap-10">
         <ProductImage detail product={product} />
         <div>
-          <div className="flex gap-2">
-            <Badge variant="outline">Legrand</Badge>
-            <Badge className="bg-zinc-700">Новинка</Badge>
-          </div>
+          {brand ? <Badge variant="outline">{brand}</Badge> : null}
           <h1 className="mt-3 text-2xl leading-tight font-bold md:text-[28px]">
             {product.name}
           </h1>
@@ -649,10 +863,12 @@ function ProductPage({
             {product.supplier_article ? (
               <span>Код пр-ля {product.supplier_article}</span>
             ) : null}
-            {product.supplier_article === "027228" ? (
-              <span>EAN 3414970344526</span>
-            ) : null}
           </div>
+          {freshUnavailable ? (
+            <p className="mt-2 text-xs text-muted-foreground" role="status">
+              Показаны сохранённые данные ЕКТ. Обновление карточки сейчас недоступно.
+            </p>
+          ) : null}
           <Card className="mt-4 gap-0 py-0 shadow-none">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -776,18 +992,37 @@ function ProductPage({
         <TabsContent value="documents">
           <div className="mt-3 max-w-3xl rounded-xl border p-4">
             {product.documents?.length ? (
-              product.documents.map((document) => (
-                <div
-                  className="flex items-center gap-2 text-sm"
-                  key={document.title}
-                >
-                  <FileText className="size-4" />
-                  {document.title}
-                </div>
-              ))
+              product.documents.map((document, index) => {
+                const href = documentHref(document.url)
+                const content = (
+                  <>
+                    <FileText className="size-4 shrink-0 text-[#c2410c]" />
+                    <span className="min-w-0 flex-1">{document.title}</span>
+                    {href ? <ExternalLink className="size-4 shrink-0" /> : null}
+                  </>
+                )
+                return href ? (
+                  <a
+                    className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-zinc-50 hover:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2410c]"
+                    href={href}
+                    key={`${document.type}-${document.url}-${index}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <div
+                    className="flex items-center gap-3 px-2 py-2 text-sm text-muted-foreground"
+                    key={`${document.type}-${index}`}
+                  >
+                    {content}
+                  </div>
+                )
+              })
             ) : (
               <p className="text-sm text-muted-foreground">
-                Документы не прикреплены
+                В доступной карточке ЕКТ документов нет
               </p>
             )}
           </div>
@@ -800,6 +1035,9 @@ function ProductPage({
 function CartPage({ onBack }: { onBack: () => void }) {
   const [cart, setCart] = useState<Cart | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const [pendingRemoval, setPendingRemoval] = useState<Cart["items"][number] | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const [mutationError, setMutationError] = useState<string | null>(null)
   const load = useCallback(
     () =>
       getCart()
@@ -822,9 +1060,35 @@ function CartPage({ onBack }: { onBack: () => void }) {
   const totalQuantity =
     cart?.items.reduce((total, item) => total + Number(item.quantity), 0) ?? 0
 
+  async function confirmRemoval() {
+    if (!cart || !pendingRemoval || removing) return
+    setRemoving(true)
+    setMutationError(null)
+    try {
+      const updated =
+        demoEnabled && cart.id === "demo-cart"
+          ? removeDemoCartItem(pendingRemoval.product_id)
+          : await removeCartItem(pendingRemoval.product_id, cart.revision)
+      setCart(updated)
+      setPendingRemoval(null)
+    } catch (error) {
+      const apiError = error as ChatApiError
+      setMutationError(apiError.message || "Не удалось удалить товар. Повторите попытку.")
+      setPendingRemoval(null)
+      if (apiError.code === "CART_CHANGED") await load()
+    } finally {
+      setRemoving(false)
+    }
+  }
+
   return (
     <div className="px-4 py-6 md:px-10">
       <h1 className="text-[26px] font-bold">Корзина</h1>
+      {mutationError ? (
+        <p className="mt-4 text-sm text-red-700" role="alert">
+          {mutationError}
+        </p>
+      ) : null}
       {loadError ? (
         <div role="alert" className="mt-5">
           <p>Не удалось загрузить корзину. Проверьте соединение и повторите попытку.</p>
@@ -883,6 +1147,19 @@ function CartPage({ onBack }: { onBack: () => void }) {
                   <strong className="ml-auto text-sm whitespace-nowrap">
                     {formatPrice(item.line_total)}
                   </strong>
+                  <Button
+                    aria-label={`Удалить ${item.name} из корзины`}
+                    className="cursor-pointer text-red-700 hover:bg-red-50 hover:text-red-800"
+                    onClick={() => {
+                      setMutationError(null)
+                      setPendingRemoval(item)
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <Trash2 className="size-4" />
+                    Удалить
+                  </Button>
                 </div>
               )
             })}
@@ -913,6 +1190,37 @@ function CartPage({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       )}
+      <Dialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => {
+          if (!open && !removing) setPendingRemoval(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить товар?</DialogTitle>
+            <DialogDescription>
+              {pendingRemoval?.name} будет удалён из корзины.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              disabled={removing}
+              onClick={() => setPendingRemoval(null)}
+              variant="outline"
+            >
+              Отмена
+            </Button>
+            <Button
+              className="bg-red-700 hover:bg-red-800"
+              disabled={removing}
+              onClick={confirmRemoval}
+            >
+              {removing ? "Удаляем…" : "Удалить"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1061,6 +1369,7 @@ export function Storefront() {
       />
       {page.name === "catalog" ? (
         <CatalogPage
+          key={catalogQuery}
           onAdd={openCartAction}
           query={catalogQuery}
           onSelect={(product) => go({ name: "product", product })}

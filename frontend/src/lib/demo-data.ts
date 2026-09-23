@@ -400,6 +400,25 @@ export function readDemoCart(): Cart {
   }
 }
 
+export function removeDemoCartItem(productId: number): Cart {
+  const current = readDemoCart()
+  const items = current.items.filter((item) => item.product_id !== productId)
+  if (items.length === current.items.length) return current
+
+  const cart: Cart = {
+    ...current,
+    revision: current.revision + 1,
+    items,
+    line_count: items.length,
+    total: items
+      .reduce((total, item) => total + Number(item.line_total), 0)
+      .toFixed(2),
+  }
+  localStorage.setItem(demoCartKey, JSON.stringify(cart))
+  window.dispatchEvent(new Event("demo-cart-updated"))
+  return cart
+}
+
 export function resolveDemoProposal(
   proposal: CartProposal,
   action: "confirm" | "cancel"

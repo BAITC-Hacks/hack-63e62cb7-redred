@@ -23,6 +23,8 @@ export type Product = {
   supplier_article?: string | null
   name: string
   category?: string | null
+  series?: string | null
+  brand?: string | null
   price: string | null
   currency: string
   available_quantity: string
@@ -99,6 +101,13 @@ export type CatalogResponse = {
   items: Product[]
   total: number
   catalog_scope: string
+}
+
+export type CatalogFacets = {
+  categories: string[]
+  series: string[]
+  current: string[]
+  breaking_capacity: string[]
 }
 
 export type AuthUser = {
@@ -364,11 +373,61 @@ export async function getCart() {
   return (await response.json()) as Cart
 }
 
-export async function searchProducts(query = "") {
-  const params = new URLSearchParams({ q: query, limit: "20", offset: "0" })
+export async function removeCartItem(productId: number, expectedRevision: number) {
+  const session = await getSession()
+  const response = await fetch(`/api/cart/items/${productId}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": session.csrf_token,
+    },
+    body: JSON.stringify({ confirmed: true, expected_revision: expectedRevision }),
+  })
+  if (!response.ok) await readError(response)
+  const cart = (await response.json()) as Cart
+  window.dispatchEvent(new Event("cart-updated"))
+  return cart
+}
+
+export type CatalogFilters = {
+  category?: string | null
+  inStock?: boolean
+  series?: string[]
+  current?: string[]
+  breakingCapacity?: string[]
+  hasDocuments?: boolean | null
+  hasCertificates?: boolean | null
+  sort?: "relevance" | "price_asc" | "price_desc"
+}
+
+export async function searchProducts(query = "", filters: CatalogFilters = {}, offset = 0) {
+  const params = new URLSearchParams({ q: query, limit: "20", offset: String(offset) })
+  if (filters.category) params.set("category", filters.category)
+  if (filters.inStock) params.set("in_stock", "true")
+  for (const value of filters.series ?? []) params.append("series", value)
+  for (const value of filters.current ?? []) params.append("current", value)
+  for (const value of filters.breakingCapacity ?? []) {
+    params.append("breaking_capacity", value)
+  }
+  if (filters.hasDocuments != null) {
+    params.set("has_documents", String(filters.hasDocuments))
+  }
+  if (filters.hasCertificates != null) {
+    params.set("has_certificates", String(filters.hasCertificates))
+  }
+  if (filters.sort && filters.sort !== "relevance") {
+    params.set("sort", filters.sort)
+  }
   const response = await fetch(`/api/products?${params}`)
   if (!response.ok) await readError(response)
   return (await response.json()) as CatalogResponse
+}
+
+export async function getProductFacets() {
+  const response = await fetch("/api/products/facets")
+  if (!response.ok) await readError(response)
+  return (await response.json()) as CatalogFacets
 }
 
 export async function getProduct(productId: number) {

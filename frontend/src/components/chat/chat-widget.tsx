@@ -658,7 +658,7 @@ export function ChatWidget() {
                 <span className="sr-only">Начать диалог заново</span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Начать заново</TooltipContent>
+            <TooltipContent side="bottom">Начать заново</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -673,7 +673,7 @@ export function ChatWidget() {
                 </span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>
+            <TooltipContent side="bottom">
               {expanded ? "Свернуть" : "Развернуть"}
             </TooltipContent>
           </Tooltip>
